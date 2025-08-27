@@ -6,8 +6,6 @@ import pandas as pd
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from psycopg2.extras import execute_values
-from .init_airline_db import createFlightsTable
-
 
 def download_csv_from_s3(s3_path: str) -> str:
     s3_hook: S3Hook = S3Hook(aws_conn_id='aws_s3')
@@ -35,18 +33,49 @@ def compute_flight_uuid(row: pd.Series) -> str:
 
 
 def create_flights_table_if_not_exists(pg_hook: PostgresHook) -> None:
+    """
+    Creates the flights table if it doesn't exist using the PostgresHook connection.
+    """
     conn = pg_hook.get_conn()
-    pg_dsn = pg_hook.get_uri()
     
     try:
-        # Call the existing createFlightsTable function
-        createFlightsTable(pg_dsn)
-        logging.info("Flights table checked/created successfully using createFlightsTable")
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS flights (
+                flight_id VARCHAR(32) PRIMARY KEY,
+                airline_code VARCHAR(10),
+                flight_number VARCHAR(20),
+                direction VARCHAR(1),
+                location_iata VARCHAR(10),
+                scheduled_time TIMESTAMP,
+                actual_time TIMESTAMP,
+                airline_name VARCHAR(100),
+                location_en VARCHAR(100),
+                location_he VARCHAR(100),
+                location_city_en VARCHAR(100),
+                country_en VARCHAR(100),
+                country_he VARCHAR(100),
+                terminal VARCHAR(10),
+                checkin_counters VARCHAR(100),
+                checkin_zone VARCHAR(100),
+                status_en VARCHAR(100),
+                status_he VARCHAR(100),
+                delay_minutes INTEGER,
+                scrape_timestamp TIMESTAMP,
+                raw_s3_path VARCHAR(500)
+            );
+        """)
+        
+        conn.commit()
+        logging.info("Flights table created successfully")
         
     except Exception as e:
+        conn.rollback()
         logging.error(f"Error creating flights table: {str(e)}")
         raise
     finally:
+        cursor.close()
         conn.close()
 
 

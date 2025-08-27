@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
 
   # zookeeper:
@@ -99,11 +97,13 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
+      - PYTHONPATH=/opt/airflow
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/etl
+      - ./utils:/opt/airflow/utils
       - ./airflow-data/logs:/opt/airflow/logs
       - ./airflow-data/plugins:/opt/airflow/plugins
-      - ./airflow-data/airflow.cfg:/opt/airlfow/airflow.cfg
       - ./data:/opt/airflow/data
     entrypoint: /bin/bash
     command:
@@ -142,11 +142,13 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=
       - AIRFLOW__CORE__LOAD_EXAMPLES=True
       - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
+      - PYTHONPATH=/opt/airflow
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/etl
+      - ./utils:/opt/airflow/utils
       - ./airflow-data/logs:/opt/airflow/logs
       - ./airflow-data/plugins:/opt/airflow/plugins
-      - ./airflow-data/airflow.cfg:/opt/airlfow/airflow.cfg
       - ./data:/opt/airflow/data
     ports:
       - 8082:8080
@@ -166,11 +168,13 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
+      - PYTHONPATH=/opt/airflow
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/etl
+      - ./utils:/opt/airflow/utils
       - ./airflow-data/logs:/opt/airflow/logs
       - ./airflow-data/plugins:/opt/airflow/plugins
-      - ./airflow-data/airflow.cfg:/opt/airlfow/airflow.cfg
       - ./data:/opt/airflow/data
     command: airflow scheduler
     restart: always

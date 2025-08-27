@@ -3,9 +3,10 @@ import logging
 import os
 import glob
 import tempfile
+from typing import List
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
-def cleanup_temp_files(file_paths: list[str]) -> None:
+def cleanup_temp_files(file_paths: List[str]) -> None:
     """
     Deletes a list of temporary files from local disk.
 
