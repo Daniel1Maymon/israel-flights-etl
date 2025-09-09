@@ -6,6 +6,7 @@ import pandas as pd
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from psycopg2.extras import execute_values
+from config.settings import S3_BUCKET_NAME
 
 def download_csv_from_s3(s3_path: str) -> str:
     s3_hook: S3Hook = S3Hook(aws_conn_id='aws_s3')
@@ -22,11 +23,11 @@ def download_csv_from_s3(s3_path: str) -> str:
 
 
 def compute_flight_uuid(row: pd.Series) -> str:
-    airline_code = row.get('CHOPER', '')
-    flight_number = row.get('CHFLTN', '')
-    direction = row.get('CHAORD', '')
-    location_iata = row.get('CHLOC1', '')
-    scheduled_departure = row.get('CHSTOL', '')
+    airline_code = row.get('airline_code', '')
+    flight_number = row.get('flight_number', '')
+    direction = row.get('arrival_departure_code', '')
+    location_iata = row.get('airport_code', '')
+    scheduled_departure = row.get('scheduled_departure', None)
 
     natural_key = f"{airline_code}_{flight_number}_{direction}_{location_iata}_{scheduled_departure}"
     return hashlib.md5(natural_key.encode()).hexdigest()
@@ -97,26 +98,26 @@ def upsert_flight_data(df: pd.DataFrame, pg_hook: PostgresHook) -> int:
                 ON CONFLICT (flight_id) DO NOTHING
             """, (
                 row['flight_id'],
-                row.get('CHOPER', ''),  # airline_code - IATA code
-                row.get('CHFLTN', ''),  # flight_number
-                row.get('CHAORD', ''),  # direction - A=Arrival, D=Departure
-                row.get('CHLOC1', ''),  # location_iata - IATA code
-                row.get('CHSTOL', ''),  # scheduled_time
-                row.get('CHPTOL', ''),  # actual_time
-                row.get('CHOPERD', ''),  # airline_name - full airline name
-                row.get('CHLOC1D', ''),  # location_en - location name in English
-                row.get('CHLOC1TH', ''),  # location_he - location name in Hebrew
-                row.get('CHLOC1T', ''),  # location_city_en - city name
+                row.get('airline_code', ''),  # airline_code - IATA code
+                row.get('flight_number', ''),  # flight_number
+                row.get('arrival_departure_code', ''),  # direction - A=Arrival, D=Departure
+                row.get('airport_code', ''),  # location_iata - IATA code
+                row.get('scheduled_departure', None),  # scheduled_time
+                row.get('actual_departure', None),  # actual_time
+                row.get('airline_name', ''),  # airline_name - full airline name
+                row.get('airport_name_english', ''),  # location_en - location name in English
+                row.get('airport_name_hebrew', ''),  # location_he - location name in Hebrew
+                row.get('city_name_english', ''),  # location_city_en - city name
                 '',  # country_en - country name in English (not in CSV, will be empty)
-                row.get('CHLOCCT', ''),  # country_he - country name in Hebrew
-                row.get('CHTERM', None),  # terminal
-                row.get('CHCINT', ''),  # checkin_counters
-                row.get('CHCKZN', ''),  # checkin_zone
-                row.get('CHRMINE', ''),  # status_en - status in English
-                row.get('CHRMINH', ''),  # status_he - status in Hebrew
+                row.get('country_name_english', ''),  # country_he - country name in Hebrew
+                row.get('terminal_number', None),  # terminal
+                row.get('check_in_time', ''),  # checkin_counters
+                row.get('check_in_zone', ''),  # checkin_zone
+                row.get('status_english', ''),  # status_en - status in English
+                row.get('status_hebrew', ''),  # status_he - status in Hebrew
                 row.get('delay_minutes', 0),  # delay_minutes
                 pd.Timestamp.now(),  # scrape_timestamp
-                's3://bbucket2/processed/'  # raw_s3_path (placeholder)
+                f's3://{S3_BUCKET_NAME}/processed/'  # raw_s3_path (placeholder)
             ))
             
             # Count only the rows that were actually inserted (not conflicts)

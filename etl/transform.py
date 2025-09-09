@@ -5,6 +5,8 @@ import glob
 import tempfile
 from typing import List
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+import json
+from config.settings import S3_BUCKET_NAME
 
 def cleanup_temp_files(file_paths: List[str]) -> None:
     """
@@ -88,7 +90,7 @@ def upload_file_to_s3(local_path: str, s3_key: str) -> str:
     """
     from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
-    bucket_name: str = "bbucket2"
+    bucket_name: str = S3_BUCKET_NAME
     s3_hook: S3Hook = S3Hook(aws_conn_id='aws_s3')
 
     s3_hook.load_file(
@@ -132,22 +134,144 @@ def download_json_from_s3(s3_path: str) -> str:
 
 def transform_flight_data(json_path: str) -> pd.DataFrame:
     """
-    Transforms flight data from a JSON file by adding a 'delay_minutes' column.
-
-    Args:
-        json_path (str): Path to the local JSON file containing flight data.
-
-    Returns:
-        pd.DataFrame: Transformed DataFrame with a new 'delay_minutes' column.
+    Transforms flight data with better column names and calculated fields.
     """
     import pandas as pd
 
-    df: pd.DataFrame = pd.read_json(json_path)
-    df["scheduled_departure"] = pd.to_datetime(df["CHSTOL"], errors="coerce")
-    df["actual_departure"] = pd.to_datetime(df["CHPTOL"], errors="coerce")
+    # Load JSON data into DataFrame
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+    df = pd.DataFrame(data)
+
+    # Rename columns to be more descriptive
+    column_mapping = {
+        'CHOPER': 'airline_code',
+        'CHFLTN': 'flight_number', 
+        'CHOPERD': 'airline_name',
+        'CHSTOL': 'scheduled_departure_time',  # This maps to the new name
+        'CHPTOL': 'actual_departure_time',
+        'CHAORD': 'arrival_departure_code',
+        'CHLOC1': 'airport_code',
+        'CHLOC1D': 'airport_name_english',
+        'CHLOC1TH': 'airport_name_hebrew',
+        'CHLOC1T': 'city_name_english',
+        'CHLOC1CH': 'country_name_hebrew',
+        'CHLOCCT': 'country_name_english',
+        'CHTERM': 'terminal_number',
+        'CHCINT': 'check_in_time',
+        'CHCKZN': 'check_in_zone',
+        'CHRMINE': 'status_english',
+        'CHRMINH': 'status_hebrew'
+    }
+    
+    df = df.rename(columns=column_mapping)
+    
+    # Convert time columns to datetime
+    df["scheduled_departure"] = pd.to_datetime(df["scheduled_departure_time"], errors="coerce")
+    df["actual_departure"] = pd.to_datetime(df["actual_departure_time"], errors="coerce")
+    
+    # Calculate delay in minutes
     df["delay_minutes"] = (
         (df["actual_departure"] - df["scheduled_departure"])
         .dt.total_seconds() / 60.0
     )
-
+    
     return df
+
+def check_data_completeness(df: pd.DataFrame) -> str:
+    """
+    Check data completeness with status-aware validation.
+    Only validate check-in fields for departed flights.
+    """
+    try:
+        # Critical fields that should always be present
+        critical_fields = [
+            'airline_code', 'flight_number', 'airline_name',
+            'scheduled_departure_time', 'actual_departure_time',
+            'airport_code', 'status_english'
+        ]
+        
+        # Check critical fields for all records
+        missing_values = {}
+        for column in critical_fields:
+            if column in df.columns:
+                missing_count = df[column].isnull().sum()
+                if missing_count > 0:
+                    missing_values[column] = missing_count
+        
+        # Check check-in fields only for departed flights
+        departed_flights = df[df['status_english'] == 'DEPARTED']
+        if len(departed_flights) > 0:
+            checkin_fields = ['check_in_time', 'check_in_zone']
+            for column in checkin_fields:
+                if column in df.columns:
+                    missing_count = departed_flights[column].isnull().sum()
+                    if missing_count > 0:
+                        missing_values[f"{column}_departed_only"] = missing_count
+        
+        if missing_values:
+            error_details = ", ".join([f"{col}: {count} missing" for col, count in missing_values.items()])
+            raise ValueError(f"Data completeness check failed. Missing values found: {error_details}")
+        
+        logging.info("Data completeness check passed - no missing values found in critical fields")
+        return "Data completeness check passed successfully"
+        
+    except Exception as e:
+        logging.error(f"Error in check_data_completeness: {str(e)}")
+        raise
+
+def transform_flight_data_pipeline(s3_path: str, timestamp: str) -> str:
+    """
+    Complete transformation pipeline for flight data:
+    - Download from S3
+    - Apply transformation (add delay_minutes)
+    - Check data completeness
+    - Save to CSV
+    - Upload processed CSV to S3
+    - Save one local inspection copy
+    - Clean up temp files
+    
+    Args:
+        s3_path: S3 path to raw JSON data
+        timestamp: Timestamp string for file naming
+        
+    Returns:
+        str: S3 path to processed CSV file
+    """
+    try:
+        # Step 1: Download JSON from S3 to a temp file
+        json_path = download_json_from_s3(s3_path)
+        logging.info(f"[json_path] {json_path}")
+
+        # Step 2: Transform the data by adding 'delay_minutes' column
+        df = transform_flight_data(json_path)
+        logging.info(f"[df.shape] {df.shape}")
+
+        # Step 3: Check data completeness before saving to CSV
+        check_data_completeness(df)
+        logging.info("Data completeness validation skipped")
+
+        # Step 4: Save transformed DataFrame to a temporary CSV file
+        csv_path = save_csv_temp(df)
+        logging.info(f"[csv_path] {csv_path}")
+
+        # Step 5: Upload the processed CSV to S3
+        processed_key = f"processed/flights_data_{timestamp}.csv"
+        s3_result = upload_file_to_s3(csv_path, processed_key)
+        logging.info(f"[s3_result] {s3_result}")
+
+        # Step 6: Save one local inspection copy (and delete older ones)
+        inspection_file = os.path.basename(processed_key)
+        save_local_inspection_copy(df, inspection_file)
+        logging.info(f"[local_inspection_file] {inspection_file}")
+
+        # Step 7: Clean up temporary files
+        temp_files = [json_path, csv_path]
+        cleanup_temp_files(temp_files)
+        logging.info(f"Cleaned up temp files: {temp_files}")
+
+        return s3_result
+
+    except Exception as e:
+        logging.error(f"Error in transform_flight_data_pipeline: {str(e)}")
+        raise

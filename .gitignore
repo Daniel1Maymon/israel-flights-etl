@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Lambda package and dependencies
+lambda_package/
+lambda_package.zip
+lambda_function_aws.py
+lambda_function.py.backup
+
+
+*.csv
+*.json

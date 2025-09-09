@@ -26,6 +26,7 @@ from utils.db_utils import (
     create_flights_table_if_not_exists,
     upsert_flight_data
 )
+from config.settings import S3_BUCKET_NAME, S3_RAW_PATH
 
 # Default arguments for all tasks
 default_args = {
@@ -50,9 +51,9 @@ def fetch_data(**context):
     from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
     task_instance = context['task_instance']
-    bucket_name = 'bbucket2'
+    bucket_name = S3_BUCKET_NAME
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    s3_key = f"uploads/flights_data_{timestamp}.json"
+    s3_key = f"{S3_RAW_PATH}/flights_data_{timestamp}.json"
     local_folder = "/opt/airflow/data/files"
     local_inspection_path = os.path.join(local_folder, f"flights_data_{timestamp}.json")
 

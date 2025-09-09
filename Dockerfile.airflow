@@ -1,3 +1,4 @@
-FROM apache/airflow:2.8.1
+FROM apache/airflow:2.9.1
 
-RUN pip install --no-cache-dir --upgrade apache-airflow-providers-amazon==8.27.0
+# Set Python version explicitly
+ENV PYTHON_VERSION=3.11

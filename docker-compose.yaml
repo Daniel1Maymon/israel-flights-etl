@@ -82,6 +82,8 @@ services:
       - POSTGRES_PORT=5432
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   airflow-init:
     build:
@@ -105,6 +107,7 @@ services:
       - ./airflow-data/logs:/opt/airflow/logs
       - ./airflow-data/plugins:/opt/airflow/plugins
       - ./data:/opt/airflow/data
+      - ./config:/opt/airflow/config
     entrypoint: /bin/bash
     command:
       - -c
@@ -150,6 +153,7 @@ services:
       - ./airflow-data/logs:/opt/airflow/logs
       - ./airflow-data/plugins:/opt/airflow/plugins
       - ./data:/opt/airflow/data
+      - ./config:/opt/airflow/config
     ports:
       - 8082:8080
     command: airflow webserver
@@ -176,5 +180,9 @@ services:
       - ./airflow-data/logs:/opt/airflow/logs
       - ./airflow-data/plugins:/opt/airflow/plugins
       - ./data:/opt/airflow/data
+      - ./config:/opt/airflow/config
     command: airflow scheduler
     restart: always
+
+volumes:
+  postgres_data:
