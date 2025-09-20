@@ -17,5 +17,6 @@
 ## Next Steps
 - [ ] Set up backend API
 - [ ] Configure frontend to connect to backend
+- [ ] Add search by destination functionality to flight data dashboard
 - [ ] Add monitoring and logging
 - [ ] Production deployment setup

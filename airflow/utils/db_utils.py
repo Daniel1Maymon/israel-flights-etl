@@ -123,7 +123,7 @@ def upsert_flight_data(df: pd.DataFrame, pg_hook: PostgresHook) -> int:
                 f's3://{S3_BUCKET_NAME}/processed/'
             ))
 
-        # Bulk insert with conflict resolution
+        # Bulk insert with conflict resolution - update dynamic fields if flight exists
         cursor.executemany("""
             INSERT INTO flights (
                 flight_id, airline_code, flight_number, direction, location_iata,
@@ -131,13 +131,29 @@ def upsert_flight_data(df: pd.DataFrame, pg_hook: PostgresHook) -> int:
                 location_city_en, country_en, country_he, terminal, checkin_counters,
                 checkin_zone, status_en, status_he, delay_minutes, scrape_timestamp, raw_s3_path
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (flight_id) DO NOTHING
+            ON CONFLICT (flight_id) DO UPDATE SET
+                actual_time = EXCLUDED.actual_time,
+                terminal = EXCLUDED.terminal,
+                checkin_counters = EXCLUDED.checkin_counters,
+                checkin_zone = EXCLUDED.checkin_zone,
+                status_en = EXCLUDED.status_en,
+                status_he = EXCLUDED.status_he,
+                delay_minutes = EXCLUDED.delay_minutes,
+                scrape_timestamp = EXCLUDED.scrape_timestamp,
+                raw_s3_path = EXCLUDED.raw_s3_path
         """, data_tuples)
 
         conn.commit()
-        rows_loaded = len(data_tuples)  # For bulk operations, we can't easily count actual inserts
-        logging.info(f"Upserted {rows_loaded} rows into flights table (inserted new or updated existing)")
-        return rows_loaded
+        
+        # Count actual inserts vs updates by checking what changed
+        cursor.execute("SELECT COUNT(*) FROM flights WHERE scrape_timestamp >= %s", (pd.Timestamp.now() - pd.Timedelta(minutes=1),))
+        recent_updates = cursor.fetchone()[0]
+        
+        rows_processed = len(data_tuples)
+        logging.info(f"Processed {rows_processed} rows into flights table (inserted new or updated existing)")
+        logging.info(f"Recent updates in last minute: {recent_updates}")
+        
+        return rows_processed
 
     except Exception as e:
         conn.rollback()

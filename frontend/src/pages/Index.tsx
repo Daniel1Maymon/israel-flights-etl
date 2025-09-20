@@ -5,8 +5,10 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { DatabaseToggle } from "@/components/DatabaseToggle";
 import { DynamicTable } from "@/components/DynamicTable";
+import { PaginatedFlightsTable } from "@/components/PaginatedFlightsTable";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useApiData } from "@/hooks/useApiData";
+import { usePaginatedFlights } from "@/hooks/usePaginatedFlights";
 import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines } from "@/lib/mockData";
 import { Plane, BarChart3 } from "lucide-react";
 
@@ -16,10 +18,25 @@ const Index = () => {
   const { t, isRTL } = useLanguage();
   
   // API endpoint - you can change this to your actual backend URL
-  const API_ENDPOINT = isDatabaseMode ? '/api/flights' : '';
+  const API_ENDPOINT = isDatabaseMode ? 'http://localhost:8000/api/v1/flights/' : '';
   
   // Fetch data from API when in database mode
   const { data: apiData, loading, error } = useApiData(API_ENDPOINT);
+  
+  // Fetch paginated flight data when in database mode
+  const {
+    data: flightData,
+    pagination,
+    loading: flightsLoading,
+    error: flightsError,
+    goToPage,
+    changePageSize,
+    sortBy,
+    currentPage,
+    pageSize,
+    sortField,
+    sortDirection
+  } = usePaginatedFlights(API_ENDPOINT);
   
   const filteredData = filterAirlinesByDestination(selectedDestination);
   const topAirlines = getTopAirlines(filteredData, 5);
@@ -86,11 +103,18 @@ const Index = () => {
 
         {/* Tables */}
         {isDatabaseMode ? (
-          <DynamicTable 
-            data={apiData} 
-            loading={loading} 
-            error={error} 
-            title={t('flights.title')}
+          <PaginatedFlightsTable
+            data={flightData}
+            pagination={pagination}
+            loading={flightsLoading}
+            error={flightsError}
+            onPageChange={goToPage}
+            onPageSizeChange={changePageSize}
+            onSort={sortBy}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            sortField={sortField}
+            sortDirection={sortDirection}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
