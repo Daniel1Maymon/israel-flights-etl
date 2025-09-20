@@ -73,7 +73,7 @@ services:
   #     - elasticsearch
 
   postgres:
-    container_name: postgres
+    container_name: postgres_airflow
     image: postgres:16.3
     environment:
       - POSTGRES_USER=postgres
@@ -85,6 +85,19 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  postgres_flights:
+    container_name: postgres_flights
+    image: postgres:16.3
+    environment:
+      - POSTGRES_USER=daniel
+      - POSTGRES_PASSWORD=daniel
+      - POSTGRES_DB=flights_db
+      - POSTGRES_PORT=5432
+    ports:
+      - "5433:5432"
+    volumes:
+      - israel-flights-etl_postgres_flights_data:/var/lib/postgresql/data
+
   airflow-init:
     build:
       context: .
@@ -93,6 +106,8 @@ services:
     container_name: airflow_init
     depends_on:
       - postgres
+    env_file:
+      - ../.env
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/airflow
@@ -100,6 +115,12 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
       - PYTHONPATH=/opt/airflow
+      # AWS S3 Connection
+      - AIRFLOW__CONN__AWS_S3=aws://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@s3.${AWS_DEFAULT_REGION}.amazonaws.com
+      # PostgreSQL Connection for Airflow metadata
+      - AIRFLOW__CONN__POSTGRES_AIRFLOW=postgres://postgres:postgres@postgres:5432/airflow
+      # PostgreSQL Connection for flights data
+      - AIRFLOW__CONN__POSTGRES_FLIGHTS=postgres://${POSTGRES_FLIGHTS_USER}:${POSTGRES_FLIGHTS_PASSWORD}@postgres_flights:5432/flights_db
     volumes:
       - ./dags:/opt/airflow/dags
       - ./etl:/opt/airflow/etl
@@ -139,6 +160,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    env_file:
+      - ../.env
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/airflow
@@ -166,6 +189,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    env_file:
+      - ../.env
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/airflow
@@ -173,6 +198,12 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
       - PYTHONPATH=/opt/airflow
+      # AWS S3 Connection
+      - AIRFLOW__CONN__AWS_S3=aws://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@s3.${AWS_DEFAULT_REGION}.amazonaws.com
+      # PostgreSQL Connection for Airflow metadata
+      - AIRFLOW__CONN__POSTGRES_AIRFLOW=postgres://postgres:postgres@postgres:5432/airflow
+      # PostgreSQL Connection for flights data
+      - AIRFLOW__CONN__POSTGRES_FLIGHTS=postgres://${POSTGRES_FLIGHTS_USER}:${POSTGRES_FLIGHTS_PASSWORD}@postgres_flights:5432/flights_db
     volumes:
       - ./dags:/opt/airflow/dags
       - ./etl:/opt/airflow/etl
@@ -186,3 +217,6 @@ services:
 
 volumes:
   postgres_data:
+  postgres_flights_data:
+  israel-flights-etl_postgres_flights_data:
+    external: true

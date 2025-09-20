@@ -215,3 +215,18 @@ lambda_function.py.backup
 
 *.csv
 *.json
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+
+# Airflow logs and data
+airflow/airflow-data/logs/
+airflow/data/files/
+airflow/create_connections.py
+
+# Environment files
+.env.local
+.env.development
+.env.production

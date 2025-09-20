@@ -275,7 +275,7 @@ def load_to_db(**kwargs) -> None:
         logging.info(f"Unique flight_id values: {df['flight_id'].nunique()} / Total rows: {len(df)}")
 
         # Create the flights table if it doesn't exist
-        pg_hook = PostgresHook(postgres_conn_id='postgres_db')
+        pg_hook = PostgresHook(postgres_conn_id='postgres_airflow')
         create_flights_table_if_not_exists(pg_hook)
 
         rows_loaded: int = upsert_flight_data(df, pg_hook)
