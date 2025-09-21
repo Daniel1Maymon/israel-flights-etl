@@ -32,6 +32,10 @@ export const useApiData = (endpoint: string): UseApiDataResult => {
         setData(result.data);
       } else if (result.flights && Array.isArray(result.flights)) {
         setData(result.flights);
+      } else if (result.airlines && Array.isArray(result.airlines)) {
+        setData(result.airlines);
+      } else if (result.countries && Array.isArray(result.countries)) {
+        setData(result.countries);
       } else {
         // If it's an object, convert it to an array
         setData([result]);

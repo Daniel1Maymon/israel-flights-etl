@@ -134,3 +134,4 @@ export const usePaginatedFlights = (baseUrl: string): UsePaginatedFlightsResult 
     sortDirection
   };
 };
+

@@ -45,3 +45,4 @@ class Flight(Base):
     
     def __repr__(self):
         return f"<Flight(flight_id='{self.flight_id}', airline='{self.airline_code}', flight_number='{self.flight_number}')>"
+

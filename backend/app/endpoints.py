@@ -4,10 +4,11 @@ This file contains all endpoint definitions for easy reference and management
 """
 
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, asc, or_
+from sqlalchemy import func, desc, asc, or_, case
 import structlog
 import time
 
@@ -574,3 +575,244 @@ FLIGHT DATA:
 
 TOTAL: 10 endpoints
 """
+
+# ============================================================================
+# AIRLINE STATISTICS ENDPOINT
+# ============================================================================
+
+# Define the response structure for airline statistics
+class AirlineStat(BaseModel):
+    """Single airline performance data"""
+    airline_code: str
+    airline_name: str
+    total_flights: int
+    on_time_flights: int
+    on_time_percentage: float
+    avg_delay_minutes: float
+    cancellation_percentage: float
+
+class AirlineStatsResponse(BaseModel):
+    """Response containing all airline statistics"""
+    airlines: List[AirlineStat]
+    total_airlines: int
+    retrieved_at: float
+
+@router.get(
+    "/api/v1/airlines/stats",
+    response_model=AirlineStatsResponse,
+    summary="Get airline performance statistics",
+    description="Get on-time performance statistics for all airlines"
+)
+async def get_airline_stats(
+    destination: Optional[str] = Query(None, description="Filter by destination country"),
+    date_range: Optional[str] = Query(None, description="Filter by date range (last-7-days, last-30-days, last-90-days, last-6-months, last-year)"),
+    day_of_week: Optional[str] = Query(None, description="Filter by day of week (monday, tuesday, wednesday, thursday, friday, saturday, sunday)"),
+    db: Session = Depends(get_database)
+) -> AirlineStatsResponse:
+    """
+    Get airline performance statistics
+    
+    This endpoint calculates on-time performance for each airline by:
+    1. Grouping flights by airline
+    2. Counting total flights (excluding NULL delay data)
+    3. Counting on-time flights (delay <= 15 minutes)
+    4. Calculating on-time percentage
+    """
+    try:
+        # Calculate airline on-time performance statistics
+        # This query groups flights by airline and calculates:
+        # 1. Total number of flights per airline (excluding NULL delay data)
+        # 2. Number of on-time flights (delay <= 15 minutes)
+        # 3. On-time percentage (on-time flights / total flights * 100)
+        # 4. Results are ordered by best performing airlines first
+        
+        # Type: SQLAlchemy Query object that will return rows with airline data
+        query = db.query(
+            # SELECT fields - airline information
+            Flight.airline_code,
+            Flight.airline_name,
+            
+            # COUNT(*) becomes func.count(Flight.flight_id)
+            func.count(Flight.flight_id).label('total_flights'),
+            
+            # COUNT(CASE WHEN delay_minutes <= 15 THEN 1 END) becomes:
+            func.count(
+                case(
+                    (Flight.delay_minutes <= 15, 1),
+                    else_=None
+                )
+            ).label('on_time_flights'),
+            
+            # AVG(delay_minutes) for average delay calculation
+            func.avg(Flight.delay_minutes).label('avg_delay_minutes'),
+            
+            # COUNT(CASE WHEN status_en LIKE '%CANCELED%' THEN 1 END) for cancellations
+            func.count(
+                case(
+                    (Flight.status_en.ilike('%canceled%'), 1),
+                    else_=None
+                )
+            ).label('cancelled_flights')
+        ).filter(
+            # WHERE delay_minutes IS NOT NULL
+            Flight.delay_minutes.isnot(None)
+        )
+        
+        # Add destination filter if specified
+        if destination and destination != "All":
+            query = query.filter(Flight.country_en == destination)
+        
+        # Add date range filter if specified
+        if date_range and date_range != "all-time":
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            
+            if date_range == "last-7-days":
+                start_date = now - timedelta(days=7)
+            elif date_range == "last-30-days":
+                start_date = now - timedelta(days=30)
+            elif date_range == "last-90-days":
+                start_date = now - timedelta(days=90)
+            elif date_range == "last-6-months":
+                start_date = now - timedelta(days=180)
+            elif date_range == "last-year":
+                start_date = now - timedelta(days=365)
+            else:
+                start_date = None
+                
+            if start_date:
+                query = query.filter(Flight.scheduled_time >= start_date)
+        
+        # Add day of week filter if specified
+        if day_of_week and day_of_week != "all-days":
+            # Map day names to weekday numbers (Monday=0, Sunday=6)
+            day_mapping = {
+                'monday': 0,
+                'tuesday': 1,
+                'wednesday': 2,
+                'thursday': 3,
+                'friday': 4,
+                'saturday': 5,
+                'sunday': 6
+            }
+            
+            if day_of_week in day_mapping:
+                weekday_num = day_mapping[day_of_week]
+                # Use PostgreSQL's EXTRACT function to get day of week
+                query = query.filter(func.extract('dow', Flight.scheduled_time) == weekday_num)
+        
+        query = query.group_by(
+            # GROUP BY airline_code, airline_name
+            Flight.airline_code,
+            Flight.airline_name
+        )
+        
+        # Execute the query
+        # Type: List of SQLAlchemy Row objects, each containing airline data
+        results: List[Any] = query.all()
+        
+        # Convert results to a list of AirlineStat objects
+        # Type: List[AirlineStat] - each item represents one airline's performance
+        airline_stats: List[AirlineStat] = []
+        
+        for row in results:
+            # Calculate metrics in Python
+            total_flights = int(row.total_flights)
+            on_time_flights = int(row.on_time_flights)
+            cancelled_flights = int(row.cancelled_flights)
+            
+            # Calculate percentages
+            on_time_percentage = (on_time_flights / total_flights * 100) if total_flights > 0 else 0.0
+            cancellation_percentage = (cancelled_flights / total_flights * 100) if total_flights > 0 else 0.0
+            
+            # Calculate average delay (handle NULL values)
+            avg_delay_minutes = float(row.avg_delay_minutes) if row.avg_delay_minutes is not None else 0.0
+            
+            # Type: AirlineStat - single airline performance data
+            airline_stat: AirlineStat = AirlineStat(
+                airline_code=str(row.airline_code),
+                airline_name=str(row.airline_name),
+                total_flights=total_flights,
+                on_time_flights=on_time_flights,
+                on_time_percentage=round(on_time_percentage, 2),
+                avg_delay_minutes=round(avg_delay_minutes, 1),
+                cancellation_percentage=round(cancellation_percentage, 2)
+            )
+            airline_stats.append(airline_stat)
+        
+        # Filter out airlines with too few flights for reliable statistics
+        # Minimum 10 flights required for meaningful analysis
+        MIN_FLIGHTS_THRESHOLD = 10
+        airline_stats = [airline for airline in airline_stats if airline.total_flights >= MIN_FLIGHTS_THRESHOLD]
+        
+        # Sort by on-time percentage (best first)
+        airline_stats.sort(key=lambda x: x.on_time_percentage, reverse=True)
+        
+        logger.info("Airline stats retrieved successfully", count=len(airline_stats))
+        
+        # Type: AirlineStatsResponse - the complete response structure
+        response: AirlineStatsResponse = AirlineStatsResponse(
+            airlines=airline_stats,
+            total_airlines=len(airline_stats),
+            retrieved_at=time.time()
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Error retrieving airline stats", error=str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve airline statistics"
+        )
+
+
+class DestinationResponse(BaseModel):
+    """Response containing all available destinations"""
+    countries: List[str]
+    total_countries: int
+    retrieved_at: float
+
+@router.get(
+    "/api/v1/destinations",
+    response_model=DestinationResponse,
+    summary="Get all available destinations",
+    description="Get list of all countries from the flight data"
+)
+async def get_destinations(db: Session = Depends(get_database)) -> DestinationResponse:
+    """
+    Get all available destinations (countries) from the flight data
+    
+    This endpoint retrieves all unique countries from the flights table
+    to populate the destination filter dropdown in the frontend.
+    """
+    try:
+        query = db.query(
+            func.distinct(Flight.country_en).label('country')
+        ).filter(
+            Flight.country_en.isnot(None),
+            Flight.country_en != ''
+        ).order_by(
+            Flight.country_en
+        )
+        
+        results: List[Any] = query.all()
+        countries: List[str] = [str(row.country) for row in results if row.country]
+        
+        logger.info("Destinations retrieved successfully", count=len(countries))
+        
+        response: DestinationResponse = DestinationResponse(
+            countries=countries,
+            total_countries=len(countries),
+            retrieved_at=time.time()
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Failed to retrieve destinations", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve destinations"
+        )
+

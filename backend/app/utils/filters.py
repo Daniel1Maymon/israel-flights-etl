@@ -107,3 +107,4 @@ def calculate_pagination_info(page: int, size: int, total: int) -> dict:
         "has_next": has_next,
         "has_prev": has_prev
     }
+

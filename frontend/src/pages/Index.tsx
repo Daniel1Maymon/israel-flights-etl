@@ -14,14 +14,35 @@ import { Plane, BarChart3 } from "lucide-react";
 
 const Index = () => {
   const [selectedDestination, setSelectedDestination] = useState("All");
+  const [selectedDateRange, setSelectedDateRange] = useState("all-time");
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState("all-days");
   const [isDatabaseMode, setIsDatabaseMode] = useState(false);
   const { t, isRTL } = useLanguage();
   
-  // API endpoint - you can change this to your actual backend URL
-  const API_ENDPOINT = isDatabaseMode ? 'http://localhost:8000/api/v1/flights/' : '';
+  // Helper function to build query parameters
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    if (selectedDestination !== 'All') {
+      params.append('destination', selectedDestination);
+    }
+    if (selectedDateRange !== 'all-time') {
+      params.append('date_range', selectedDateRange);
+    }
+    if (selectedDayOfWeek !== 'all-days') {
+      params.append('day_of_week', selectedDayOfWeek);
+    }
+    return params.toString();
+  };
+
+  // API endpoints
+  const FLIGHTS_API_ENDPOINT = isDatabaseMode ? 'http://localhost:8000/api/v1/flights/' : '';
+  const AIRLINES_API_ENDPOINT = `http://localhost:8000/api/v1/airlines/stats${buildQueryParams() ? `?${buildQueryParams()}` : ''}`;
   
-  // Fetch data from API when in database mode
-  const { data: apiData, loading, error } = useApiData(API_ENDPOINT);
+  // Fetch flight data from API when in database mode
+  const { data: apiData, loading, error } = useApiData(FLIGHTS_API_ENDPOINT);
+  
+  // Fetch airline performance data (always use real data for airline tables)
+  const { data: airlineData, loading: airlineLoading, error: airlineError } = useApiData(AIRLINES_API_ENDPOINT);
   
   // Fetch paginated flight data when in database mode
   const {
@@ -36,11 +57,31 @@ const Index = () => {
     pageSize,
     sortField,
     sortDirection
-  } = usePaginatedFlights(API_ENDPOINT);
+  } = usePaginatedFlights(FLIGHTS_API_ENDPOINT);
   
-  const filteredData = filterAirlinesByDestination(selectedDestination);
-  const topAirlines = getTopAirlines(filteredData, 5);
-  const bottomAirlines = getBottomAirlines(filteredData, 5);
+  // Convert API data to mock format for AirlineTable component
+  const convertToMockFormat = (airlines: any[]): any[] => {
+    return airlines.map(airline => ({
+      airline: airline.airline_name, // Changed from 'name' to 'airline'
+      onTimePercentage: airline.on_time_percentage,
+      avgDelayMinutes: airline.avg_delay_minutes,
+      cancellationPercentage: airline.cancellation_percentage,
+      flightCount: airline.total_flights,
+      destinations: [] // We don't have this in our current API
+    }));
+  };
+  
+  // Use real data for airline tables, fallback to mock data
+  const realAirlines = airlineData || [];
+  
+  // Backend now handles all filtering, so we just use the data as-is
+  const filteredData = realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(selectedDestination);
+  const topAirlines = realAirlines.length > 0 
+    ? convertToMockFormat(realAirlines.slice(0, 5))
+    : getTopAirlines(filterAirlinesByDestination(selectedDestination), 5);
+  const bottomAirlines = realAirlines.length > 0 
+    ? convertToMockFormat(realAirlines.slice(-5))
+    : getBottomAirlines(filterAirlinesByDestination(selectedDestination), 5);
 
   return (
     <div className="min-h-screen bg-background" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -75,19 +116,25 @@ const Index = () => {
         <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-primary">
-              {filteredData.length}
+              {realAirlines.length > 0 ? realAirlines.length : filteredData.length}
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.total')}</div>
           </div>
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-success">
-              {filteredData.reduce((sum, airline) => sum + airline.flightCount, 0).toLocaleString()}
+              {realAirlines.length > 0 
+                ? realAirlines.reduce((sum: number, airline: any) => sum + airline.total_flights, 0).toLocaleString()
+                : filteredData.reduce((sum, airline) => sum + airline.flightCount, 0).toLocaleString()
+              }
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.totalFlights')}</div>
           </div>
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-info">
-              {(filteredData.reduce((sum, airline) => sum + airline.onTimePercentage, 0) / filteredData.length).toFixed(1)}%
+              {realAirlines.length > 0 
+                ? (realAirlines.reduce((sum: number, airline: any) => sum + airline.on_time_percentage, 0) / realAirlines.length).toFixed(1)
+                : (filteredData.reduce((sum, airline) => sum + airline.onTimePercentage, 0) / filteredData.length).toFixed(1)
+              }%
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.avgOnTime')}</div>
           </div>
@@ -98,6 +145,10 @@ const Index = () => {
           <DashboardFilters
             selectedDestination={selectedDestination}
             onDestinationChange={setSelectedDestination}
+            selectedDateRange={selectedDateRange}
+            onDateRangeChange={setSelectedDateRange}
+            selectedDayOfWeek={selectedDayOfWeek}
+            onDayOfWeekChange={setSelectedDayOfWeek}
           />
         </div>
 

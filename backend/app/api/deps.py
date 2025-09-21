@@ -60,3 +60,4 @@ def validate_page_number(page: int) -> int:
         )
     
     return page
+
