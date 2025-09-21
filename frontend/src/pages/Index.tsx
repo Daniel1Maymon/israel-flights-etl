@@ -76,11 +76,17 @@ const Index = () => {
   
   // Backend now handles all filtering, so we just use the data as-is
   const filteredData = realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(selectedDestination);
+  
+  // Sort airlines by on-time percentage (best to worst) for proper top/bottom separation
+  const sortedAirlines = realAirlines.length > 0 
+    ? [...realAirlines].sort((a, b) => b.on_time_percentage - a.on_time_percentage)
+    : filterAirlinesByDestination(selectedDestination);
+  
   const topAirlines = realAirlines.length > 0 
-    ? convertToMockFormat(realAirlines.slice(0, 5))
+    ? convertToMockFormat(sortedAirlines.slice(0, 5))
     : getTopAirlines(filterAirlinesByDestination(selectedDestination), 5);
   const bottomAirlines = realAirlines.length > 0 
-    ? convertToMockFormat(realAirlines.slice(-5))
+    ? convertToMockFormat(sortedAirlines.slice(-5))
     : getBottomAirlines(filterAirlinesByDestination(selectedDestination), 5);
 
   return (
