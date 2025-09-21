@@ -82,12 +82,22 @@ const Index = () => {
     ? [...realAirlines].sort((a, b) => b.on_time_percentage - a.on_time_percentage)
     : filterAirlinesByDestination(selectedDestination);
   
-  const topAirlines = realAirlines.length > 0 
-    ? convertToMockFormat(sortedAirlines.slice(0, 5))
-    : getTopAirlines(filterAirlinesByDestination(selectedDestination), 5);
-  const bottomAirlines = realAirlines.length > 0 
-    ? convertToMockFormat(sortedAirlines.slice(-5))
-    : getBottomAirlines(filterAirlinesByDestination(selectedDestination), 5);
+  // Handle case where we have exactly 5 or fewer airlines
+  let topAirlines, bottomAirlines;
+  if (realAirlines.length > 0) {
+    if (sortedAirlines.length <= 5) {
+      // If 5 or fewer airlines, show all in top table, empty bottom table
+      topAirlines = convertToMockFormat(sortedAirlines);
+      bottomAirlines = []; // Empty array for bottom table
+    } else {
+      // If more than 5 airlines, show top 5 and bottom 5
+      topAirlines = convertToMockFormat(sortedAirlines.slice(0, 5));
+      bottomAirlines = convertToMockFormat(sortedAirlines.slice(-5));
+    }
+  } else {
+    topAirlines = getTopAirlines(filterAirlinesByDestination(selectedDestination), 5);
+    bottomAirlines = getBottomAirlines(filterAirlinesByDestination(selectedDestination), 5);
+  }
 
   return (
     <div className="min-h-screen bg-background" dir={isRTL ? 'rtl' : 'ltr'}>
