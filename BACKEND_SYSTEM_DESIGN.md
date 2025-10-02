@@ -7,10 +7,11 @@
 The Cursor agent built a **modern FastAPI backend** with a **continuous ETL pipeline** that processes Israel flight data through a **layered architecture** with these key components:
 
 - **ETL Pipeline** running every 15 minutes (Airflow + S3 + PostgreSQL)
-- **6 API Endpoints** for real-time flight data access
+- **15+ API Endpoints** for real-time flight data access and airline analytics
 - **PostgreSQL Database** with continuously updated flight records
+- **Advanced Airline Analytics** with KPI calculations and performance metrics
 - **Production-Ready Features** (logging, error handling, health checks)
-- **Advanced Filtering** (search, pagination, statistics)
+- **Sophisticated Filtering** (search, pagination, statistics, data quality scoring)
 
 ---
 
@@ -36,9 +37,12 @@ The Cursor agent built a **modern FastAPI backend** with a **continuous ETL pipe
 │         Business Logic Layer        │  ← Core Services
 │         (Data Processing)           │
 │  • Flight Service                   │
+│  • Airline Analytics Service        │
 │  • Filter Engine                    │
 │  • Search Engine                    │
 │  • Statistics Engine                │
+│  • KPI Calculation Engine           │
+│  • Data Quality Assessment          │
 └─────────────────────────────────────┘
                    │
                    ▼
@@ -53,7 +57,7 @@ The Cursor agent built a **modern FastAPI backend** with a **continuous ETL pipe
                    ▼
 ┌─────────────────────────────────────┐
 │           Database Layer            │  ← Shared Data Storage
-│    PostgreSQL (port 5433)           │
+│    PostgreSQL (port 5432)           │
 │  • flights table (9,909+ records)   │
 │  • Indexed for Performance          │
 │  • Connection Pooling               │
@@ -129,7 +133,7 @@ ETL Pipeline (Airflow)                    Backend API (FastAPI)
 │ 1. Fetches from API     │              │ 1. Receives HTTP request│
 │ 2. Transforms data      │              │ 2. Queries database     │
 │ 3. Upserts to PostgreSQL│ ────────────►│ 3. Returns JSON response│
-│    (port 5433)          │              │    (same database)      │
+│    (port 5432)          │              │    (same database)      │
 └─────────────────────────┘              └─────────────────────────┘
          │                                        │
          ▼                                        ▼
@@ -141,7 +145,7 @@ ETL Pipeline (Airflow)                    Backend API (FastAPI)
 └─────────────────────────┘              └─────────────────────────┘
 ```
 
-**Key Point**: Both ETL and API use the **same PostgreSQL database** (port 5433). The ETL writes data, the API reads data. No data transfer between services - just shared database access.
+**Key Point**: Both ETL and API use the **same PostgreSQL database instance** (`postgres_flights` on port 5432). The ETL writes data, the API reads data. No data transfer between services - just shared database access.
 
 ---
 
@@ -149,24 +153,39 @@ ETL Pipeline (Airflow)                    Backend API (FastAPI)
 
 ### Step 1: Core Flight Operations
 ```
-GET /api/v1/flights          → List Flights (with pagination & filtering)
-GET /api/v1/flights/{id}     → Single Flight (by ID)
-GET /api/v1/flights/search   → Search Flights (text search)
-GET /api/v1/flights/stats    → Flight Statistics (aggregated data)
+GET /api/v1/flights/           → List Flights (with pagination & filtering)
+GET /api/v1/flights/{id}       → Single Flight (by ID)
+GET /api/v1/flights/search     → Search Flights (text search)
+GET /api/v1/flights/stats      → Flight Statistics (aggregated data)
+GET /api/v1/flights/delays     → Delayed Flights (example endpoint)
 ```
 
-### Step 2: Reference Data
+### Step 2: Airline Analytics (NEW!)
 ```
-GET /api/v1/airlines         → Airline List (unique airlines)
-GET /api/v1/destinations     → Destination List (unique destinations)
+GET /api/v1/airlines/stats     → Comprehensive Airline Performance KPIs
+GET /api/v1/airlines/top-bottom → Top/Bottom Performing Airlines
+GET /api/v1/airlines/destinations → Airline-Specific Destinations
+GET /api/v1/airlines/{name}/destinations → Specific Airline Destinations
+GET /api/v1/airlines/health    → Airline Service Health Check
 ```
 
-### Step 3: System Health
+### Step 3: Reference Data
 ```
-GET /health                  → Basic Health Check
-GET /ready                   → Database Connectivity Check
-GET /metrics                 → Performance Data
+GET /api/v1/airlines           → Airline List (unique airlines)
+GET /api/v1/destinations       → Destination List (unique destinations)
+GET /api/v1/flights/airlines   → Airline List (alternative endpoint)
+GET /api/v1/flights/destinations → Destination List (alternative endpoint)
 ```
+
+### Step 4: System Health
+```
+GET /                         → API Root Information
+GET /health                   → Basic Health Check
+GET /ready                    → Database Connectivity Check
+GET /metrics                  → Performance Data
+```
+
+**Total: 15+ Endpoints** (expanded from original 6)
 
 ---
 
@@ -212,15 +231,20 @@ Table: flights
 ├── flight_number - string
 ├── direction - string (A=Arrival, D=Departure)
 ├── location_iata - string
+├── location_en - string
+├── location_he - string
+├── location_city_en - string (NEW)
+├── country_en - string (NEW)
+├── country_he - string (NEW)
 ├── scheduled_time - timestamp
 ├── actual_time - timestamp
 ├── delay_minutes - integer
 ├── airline_name - string
-├── location_en - string
-├── location_he - string
 ├── status_en - string
 ├── status_he - string
 ├── terminal - string
+├── checkin_counters - string (NEW)
+├── checkin_zone - string (NEW)
 ├── scrape_timestamp - timestamp
 └── raw_s3_path - string
 ```
@@ -235,6 +259,66 @@ flights table indexes:
 ├── Index: status_en (for status filtering)
 ├── Index: terminal (for terminal filtering)
 └── Index: delay_minutes (for delay range queries)
+```
+
+---
+
+## Airline Analytics System (NEW!)
+
+### Step 1: AirlineAggregationService
+```
+The system now includes a sophisticated airline analytics service that:
+
+• Calculates Key Performance Indicators (KPIs) for each airline
+• Handles complex data aggregation and grouping
+• Provides data quality scoring for reliability assessment
+• Supports advanced filtering and sorting options
+• Caches results for performance optimization
+```
+
+### Step 2: Key Performance Indicators (KPIs)
+```
+For each airline, the system calculates:
+
+• On-Time Percentage: % of flights arriving/departing on time
+• Average Delay: Mean delay time for delayed flights only
+• Total Flights: Count of all flights for the airline
+• Cancellation Rate: % of flights that were cancelled
+• Data Quality Score: Reliability assessment (0-100)
+• Destinations Served: List of unique destinations
+• Last Updated: Timestamp of last calculation
+```
+
+### Step 3: Advanced Analytics Features
+```
+• Top/Bottom Analysis: Best and worst performing airlines
+• Destination Performance: How airlines perform to specific destinations
+• Data Quality Assessment: Identifies airlines with incomplete data
+• Flexible Filtering: By date range, destination, country, airline codes
+• Performance Sorting: By on-time %, delay time, flight count, etc.
+• Caching: 15-minute cache for improved performance
+```
+
+### Step 4: API Response Example
+```json
+{
+  "airlines": [
+    {
+      "airline_code": "LY",
+      "airline_name": "El Al Israel Airlines",
+      "on_time_percentage": 85.2,
+      "avg_delay_minutes": 12.5,
+      "total_flights": 1250,
+      "cancellation_percentage": 2.1,
+      "data_quality_score": 94.5,
+      "destinations": ["New York", "London", "Paris"],
+      "last_updated": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total_airlines": 15,
+  "total_flights": 9909,
+  "calculation_time_ms": 245
+}
 ```
 
 ---
@@ -261,8 +345,9 @@ Search Query searches across these fields:
 ├── airline_name (El Al Israel Airlines)
 ├── location_en (Ben Gurion Airport)
 ├── location_he (נמל התעופה בן גוריון)
-├── location_city_en (Tel Aviv)
-├── country_en (Israel)
+├── location_city_en (Tel Aviv) (NEW)
+├── country_en (Israel) (NEW)
+├── country_he (ישראל) (NEW)
 ├── flight_number (LY001)
 └── airline_code (LY)
 ```
@@ -391,13 +476,18 @@ Production Environment:
 ```
 backend/
 ├── app/                    # Main application
-│   ├── api/v1/            # API endpoints
-│   │   └── flights.py     # Flight endpoints
+│   ├── api/               # API endpoints
+│   │   ├── v1/            # API version 1
+│   │   │   └── flights.py # Flight endpoints
+│   │   └── airline_endpoints.py # Airline analytics endpoints (NEW)
 │   ├── models/            # Database models
 │   │   └── flight.py      # Flight model
 │   ├── schemas/           # Pydantic schemas
-│   │   └── flight.py      # Request/response schemas
-│   ├── utils/             # Business logic
+│   │   ├── flight.py      # Request/response schemas
+│   │   └── airline.py     # Airline analytics schemas (NEW)
+│   ├── services/          # Business logic services (NEW)
+│   │   └── airline_aggregation.py # Airline analytics service
+│   ├── utils/             # Utility functions
 │   │   └── filters.py     # Filtering utilities
 │   ├── main.py            # FastAPI app setup
 │   ├── config.py          # Configuration
@@ -412,10 +502,13 @@ backend/
 main.py → FastAPI App Setup
 config.py → Environment Settings
 database.py → DB Connection Pool
-flights.py → API Endpoints
+flights.py → Core Flight API Endpoints
+airline_endpoints.py → Airline Analytics Endpoints (NEW)
+airline_aggregation.py → Airline KPI Calculation Service (NEW)
 filters.py → Query Building
 flight.py (models) → Database Schema
-flight.py (schemas) → Data Validation
+flight.py (schemas) → Flight Data Validation
+airline.py (schemas) → Airline Analytics Data Validation (NEW)
 ```
 
 ---
@@ -442,6 +535,10 @@ Testing Strategy:
 - [ ] **Single Flight**: `GET /api/v1/flights/{id}` works
 - [ ] **Search**: `GET /api/v1/flights/search?q=test` works
 - [ ] **Filtering**: All filter parameters work
+- [ ] **Airline Analytics**: `GET /api/v1/airlines/stats` returns KPIs
+- [ ] **Top/Bottom Airlines**: `GET /api/v1/airlines/top-bottom` works
+- [ ] **Airline Destinations**: `GET /api/v1/airlines/destinations` works
+- [ ] **Data Quality**: Airline data quality scores are calculated
 - [ ] **Error Handling**: Invalid requests return proper errors
 
 ---
@@ -476,6 +573,10 @@ Security Features:
 │   └── Pydantic Validation (type checking)
 ├── SQL Injection Prevention
 │   └── Parameterized Queries only
+├── Pagination Limits
+│   └── ALL endpoints have max 200 items/page limit
+├── Data Exposure Prevention
+│   └── No endpoints return ALL records without pagination
 ├── CORS Configuration
 │   └── Allowed Origins Only
 └── Error Sanitization
@@ -490,15 +591,19 @@ Security Features:
 1. **Clean Architecture**: Easy to understand and maintain
 2. **Production Ready**: Logging, error handling, health checks
 3. **Scalable**: Connection pooling, efficient queries
-4. **Well Documented**: Auto-generated API docs
-5. **Type Safe**: Pydantic schemas prevent errors
+4. **Advanced Analytics**: Sophisticated airline performance analysis
+5. **Data Quality**: Built-in data quality assessment and scoring
+6. **Well Documented**: Auto-generated API docs
+7. **Type Safe**: Pydantic schemas prevent errors
+8. **Performance Optimized**: Caching and efficient aggregation queries
 
 ### How to Use
 1. **Start**: `python -m app.main`
 2. **Test**: `curl http://localhost:8000/health`
 3. **Explore**: Visit `http://localhost:8000/docs`
-4. **Query**: Use filters and pagination
-5. **Monitor**: Check logs and metrics
+4. **Query Flights**: Use filters and pagination
+5. **Analyze Airlines**: Use `/api/v1/airlines/stats` for KPIs
+6. **Monitor**: Check logs and metrics
 
 ### Next Steps
 1. **Add Authentication**: JWT tokens for production
@@ -523,7 +628,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 4. Set environment variables
-export DATABASE_URL="postgresql://daniel:daniel@localhost:5433/flights_db"
+export DATABASE_URL="postgresql://daniel:daniel@localhost:5432/flights_db"
 
 # 5. Start the server
 python -m app.main
@@ -532,10 +637,14 @@ python -m app.main
 curl http://localhost:8000/health
 curl http://localhost:8000/api/v1/flights?page=1&size=5
 
-# 7. View documentation
+# 7. Test airline analytics
+curl http://localhost:8000/api/v1/airlines/stats
+curl http://localhost:8000/api/v1/airlines/top-bottom
+
+# 8. View documentation
 open http://localhost:8000/docs
 ```
 
 ---
 
-**That's it!** The Cursor agent built a professional-grade backend that's ready for production use. The system is well-architected, thoroughly documented, and includes all the features you'd expect from a modern API service.
+**That's it!** The Cursor agent built a professional-grade backend that's ready for production use. The system is well-architected, thoroughly documented, and includes advanced airline analytics capabilities that go far beyond basic CRUD operations. The system now provides sophisticated data analysis, performance metrics, and data quality assessment - making it a comprehensive flight data platform.

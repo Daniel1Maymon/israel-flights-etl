@@ -54,6 +54,9 @@ const translations = {
     'filters.friday': 'Friday',
     'filters.saturday': 'Saturday',
     'filters.sunday': 'Sunday',
+    'filters.airline': 'Airline',
+    'filters.selectAirline': 'Select airline',
+    'filters.allAirlines': 'All Airlines',
     
     // Airline Table
     'airline.name': 'Airline',
@@ -64,12 +67,14 @@ const translations = {
     'airline.onTime': 'On Time',
     'airline.avgDelay': 'Avg Delay',
     'airline.minutes': 'min',
-    'airline.flights': '# Flights',
+    'airline.flights': 'Flights',
     'airline.total': 'Total Airlines',
     'airline.totalFlights': 'Total Flights',
     'airline.avgOnTime': 'Avg On-Time Rate',
     'airline.top5': 'Top 5 Airlines',
     'airline.bottom5': 'Bottom 5 Airlines',
+    'airline.destination': 'Destination',
+    'airline.destinationsFor': 'Destinations for',
     
     // Common
     'common.loading': 'Loading...',
@@ -150,6 +155,9 @@ const translations = {
     'filters.friday': 'יום שישי',
     'filters.saturday': 'יום שבת',
     'filters.sunday': 'יום ראשון',
+    'filters.airline': 'חברת תעופה',
+    'filters.selectAirline': 'בחר חברת תעופה',
+    'filters.allAirlines': 'כל חברות התעופה',
     
     // Airline Table
     'airline.name': 'חברת תעופה',
@@ -166,6 +174,8 @@ const translations = {
     'airline.avgOnTime': 'אחוז בזמן ממוצע',
     'airline.top5': '5 החברות הטובות',
     'airline.bottom5': '5 החברות הגרועות',
+    'airline.destination': 'יעד',
+    'airline.destinationsFor': 'יעדים עבור',
     
     // Common
     'common.loading': 'טוען...',

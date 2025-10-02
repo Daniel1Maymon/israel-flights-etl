@@ -10,24 +10,15 @@ logger = structlog.get_logger()
 
 
 def get_database() -> Generator[Session, None, None]:
-    """Dependency to get database session with health check"""
+    """Dependency to get database session"""
     db = next(get_db())
-    
-    # Check database connection health
-    if not check_db_connection():
-        logger.error("Database connection unhealthy")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database connection unavailable"
-        )
-    
     try:
         yield db
     except Exception as e:
         logger.error("Database session error", error=str(e))
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail="Database error occurred"
         )
     finally:

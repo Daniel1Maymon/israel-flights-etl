@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.database import check_db_connection
-from app.endpoints import router
+from app.api.router import api_router
 from app.schemas.flight import ErrorResponse
 
 # Configure structured logging
@@ -127,8 +127,8 @@ async def global_exception_handler(request, exc):
     )
 
 
-# Include all endpoints from central file
-app.include_router(router)
+# Include all API endpoints
+app.include_router(api_router)
 
 
 if __name__ == "__main__":

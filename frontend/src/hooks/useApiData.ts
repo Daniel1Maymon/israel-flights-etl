@@ -34,6 +34,8 @@ export const useApiData = (endpoint: string): UseApiDataResult => {
         setData(result.flights);
       } else if (result.airlines && Array.isArray(result.airlines)) {
         setData(result.airlines);
+      } else if (result.destinations && Array.isArray(result.destinations)) {
+        setData(result.destinations);
       } else if (result.countries && Array.isArray(result.countries)) {
         setData(result.countries);
       } else {

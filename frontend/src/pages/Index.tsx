@@ -16,6 +16,7 @@ const Index = () => {
   const [selectedDestination, setSelectedDestination] = useState("All");
   const [selectedDateRange, setSelectedDateRange] = useState("all-time");
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState("all-days");
+  const [selectedAirline, setSelectedAirline] = useState("All");
   const [isDatabaseMode, setIsDatabaseMode] = useState(false);
   const { t, isRTL } = useLanguage();
   
@@ -31,18 +32,28 @@ const Index = () => {
     if (selectedDayOfWeek !== 'all-days') {
       params.append('day_of_week', selectedDayOfWeek);
     }
+    if (selectedAirline !== 'All') {
+      params.append('airline', selectedAirline);
+    }
     return params.toString();
   };
 
   // API endpoints
   const FLIGHTS_API_ENDPOINT = isDatabaseMode ? 'http://localhost:8000/api/v1/flights/' : '';
   const AIRLINES_API_ENDPOINT = `http://localhost:8000/api/v1/airlines/stats${buildQueryParams() ? `?${buildQueryParams()}` : ''}`;
+  const AIRLINE_DESTINATIONS_ENDPOINT = selectedAirline !== 'All' 
+    ? `http://localhost:8000/api/v1/airlines/${encodeURIComponent(selectedAirline)}/destinations${buildQueryParams() ? `?${buildQueryParams()}` : ''}`
+    : '';
   
   // Fetch flight data from API when in database mode
   const { data: apiData, loading, error } = useApiData(FLIGHTS_API_ENDPOINT);
   
   // Fetch airline performance data (always use real data for airline tables)
   const { data: airlineData, loading: airlineLoading, error: airlineError } = useApiData(AIRLINES_API_ENDPOINT);
+  
+  
+  // Fetch airline destinations data when an airline is selected
+  const { data: airlineDestinationsData, loading: airlineDestinationsLoading, error: airlineDestinationsError } = useApiData(AIRLINE_DESTINATIONS_ENDPOINT);
   
   // Fetch paginated flight data when in database mode
   const {
@@ -61,43 +72,65 @@ const Index = () => {
   
   // Convert API data to mock format for AirlineTable component
   const convertToMockFormat = (airlines: any[]): any[] => {
-    return airlines.map(airline => ({
-      airline: airline.airline_name, // Changed from 'name' to 'airline'
-      onTimePercentage: airline.on_time_percentage,
-      avgDelayMinutes: airline.avg_delay_minutes,
-      cancellationPercentage: airline.cancellation_percentage,
-      flightCount: airline.total_flights,
-      destinations: [] // We don't have this in our current API
-    }));
+    if (!Array.isArray(airlines) || airlines.length === 0) {
+      return [];
+    }
+    
+    const result = airlines
+      .filter(airline => airline && airline.airline_name) // Filter out invalid entries
+      .map((airline, index) => {
+        return {
+          airline: airline.airline_name || `Unknown-${index}`, // Use index to make keys unique
+          onTimePercentage: airline.on_time_percentage || 0,
+          avgDelayMinutes: airline.avg_delay_minutes || 0,
+          cancellationPercentage: airline.cancellation_percentage || 0,
+          flightCount: airline.total_flights || 0,
+          destinations: [] // We don't have this in our current API
+        };
+      });
+    return result;
+  };
+
+  // Convert airline destinations data to mock format for AirlineTable component
+  const convertDestinationsToMockFormat = (destinations: any[]): any[] => {
+    if (!Array.isArray(destinations) || destinations.length === 0) {
+      return [];
+    }
+    
+    return destinations
+      .filter(destination => destination && destination.destination && destination.destination.trim() !== '') // Filter out invalid and empty entries
+      .map((destination, index) => ({
+        airline: destination.destination.trim() || `Unknown-${index}`, // Use trimmed destination name
+        onTimePercentage: destination.on_time_percentage || 0,
+        avgDelayMinutes: destination.avg_delay_minutes || 0,
+        cancellationPercentage: destination.cancellation_percentage || 0,
+        flightCount: destination.total_flights || 0,
+        destinations: []
+      }));
   };
   
   // Use real data for airline tables, fallback to mock data
-  const realAirlines = airlineData || [];
+  const realAirlines = Array.isArray(airlineData) ? airlineData : (airlineData as any)?.airlines || [];
   
-  // Backend now handles all filtering, so we just use the data as-is
-  const filteredData = realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(selectedDestination);
   
-  // Sort airlines by on-time percentage (best to worst) for proper top/bottom separation
-  const sortedAirlines = realAirlines.length > 0 
-    ? [...realAirlines].sort((a, b) => b.on_time_percentage - a.on_time_percentage)
-    : filterAirlinesByDestination(selectedDestination);
   
-  // Handle case where we have exactly 5 or fewer airlines
-  let topAirlines, bottomAirlines;
-  if (realAirlines.length > 0) {
-    if (sortedAirlines.length <= 5) {
-      // If 5 or fewer airlines, show all in top table, empty bottom table
-      topAirlines = convertToMockFormat(sortedAirlines);
-      bottomAirlines = []; // Empty array for bottom table
-    } else {
-      // If more than 5 airlines, show top 5 and bottom 5
-      topAirlines = convertToMockFormat(sortedAirlines.slice(0, 5));
-      bottomAirlines = convertToMockFormat(sortedAirlines.slice(-5));
-    }
-  } else {
-    topAirlines = getTopAirlines(filterAirlinesByDestination(selectedDestination), 5);
-    bottomAirlines = getBottomAirlines(filterAirlinesByDestination(selectedDestination), 5);
-  }
+  // Determine which data to use based on airline selection
+  const isAirlineView = selectedAirline !== 'All';
+  
+  // If airline is selected, use destinations data; otherwise use airlines data
+  const displayData = isAirlineView 
+    ? ((airlineDestinationsData as any)?.destinations || [])
+    : (realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(selectedDestination));
+  
+  // For stats panel - use airlines data
+  const statsData = realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(selectedDestination);
+  
+  // Convert data to mock format for AirlineTable components
+  const allAirlines = isAirlineView
+    ? convertDestinationsToMockFormat(displayData)
+    : convertToMockFormat(displayData);
+  
+  // Debug converted data
 
   return (
     <div className="min-h-screen bg-background" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -132,7 +165,7 @@ const Index = () => {
         <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-primary">
-              {realAirlines.length > 0 ? realAirlines.length : filteredData.length}
+              {statsData.length}
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.total')}</div>
           </div>
@@ -140,7 +173,7 @@ const Index = () => {
             <div className="text-2xl font-bold text-success">
               {realAirlines.length > 0 
                 ? realAirlines.reduce((sum: number, airline: any) => sum + airline.total_flights, 0).toLocaleString()
-                : filteredData.reduce((sum, airline) => sum + airline.flightCount, 0).toLocaleString()
+                : statsData.reduce((sum, airline) => sum + airline.flightCount, 0).toLocaleString()
               }
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.totalFlights')}</div>
@@ -149,7 +182,7 @@ const Index = () => {
             <div className="text-2xl font-bold text-info">
               {realAirlines.length > 0 
                 ? (realAirlines.reduce((sum: number, airline: any) => sum + airline.on_time_percentage, 0) / realAirlines.length).toFixed(1)
-                : (filteredData.reduce((sum, airline) => sum + airline.onTimePercentage, 0) / filteredData.length).toFixed(1)
+                : (statsData.reduce((sum, airline) => sum + airline.onTimePercentage, 0) / statsData.length).toFixed(1)
               }%
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.avgOnTime')}</div>
@@ -165,6 +198,8 @@ const Index = () => {
             onDateRangeChange={setSelectedDateRange}
             selectedDayOfWeek={selectedDayOfWeek}
             onDayOfWeekChange={setSelectedDayOfWeek}
+            selectedAirline={selectedAirline}
+            onAirlineChange={setSelectedAirline}
           />
         </div>
 
@@ -184,16 +219,33 @@ const Index = () => {
             sortDirection={sortDirection}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <AirlineTable
-              data={topAirlines}
-              isTop={true}
-            />
-            <AirlineTable
-              data={bottomAirlines}
-              isTop={false}
-            />
-          </div>
+          selectedAirline !== 'All' ? (
+            // Single table view for selected airline's destinations
+            <div className="max-h-screen overflow-hidden">
+              <AirlineTable
+                data={allAirlines}
+                isTop={true}
+                isAirlineView={true}
+                airlineName={selectedAirline}
+              />
+            </div>
+          ) : (
+            // Two table view for top/bottom airlines (when no specific airline selected)
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-screen overflow-hidden">
+              <div className="flex-shrink-0">
+                <AirlineTable
+                  data={allAirlines}
+                  isTop={true}
+                />
+              </div>
+              <div className="flex-shrink-0">
+                <AirlineTable
+                  data={allAirlines}
+                  isTop={false}
+                />
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>

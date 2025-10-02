@@ -230,3 +230,32 @@ airflow/create_connections.py
 .env.local
 .env.development
 .env.production
+
+# Debug and temporary files
+*_debug.py
+*_test.py
+*_verify.py
+*_compare.py
+*_investigate.py
+*_fix.py
+debug_*.py
+test_*.py
+verify_*.py
+compare_*.py
+investigate_*.py
+*_fix.py
+download_*.py
+
+# Duplicate files (macOS creates these)
+* 2.*
+* 2
+
+# Data files (should be in data directories)
+*.csv
+*.json
+flights_data_*.csv
+flights_data_*.json
+
+# Log files
+*.log
+logs/

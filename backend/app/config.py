@@ -5,12 +5,16 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database settings
-    database_url: str = "postgresql+psycopg://daniel:daniel@localhost:5433/flights_db"
     db_host: str = "localhost"
-    db_port: int = 5433
+    db_port: int = 5433  # Changed to 5433 to match Airflow's postgres_flights
     db_name: str = "flights_db"
     db_user: str = "daniel"
     db_password: str = "daniel"
+    
+    @property
+    def database_url(self) -> str:
+        """Build database URL from individual components"""
+        return f"postgresql+psycopg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
     # API settings
     api_host: str = "0.0.0.0"
@@ -25,6 +29,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://localhost:8080", 
         "http://127.0.0.1:8080",
+        "http://localhost:8081", 
+        "http://127.0.0.1:8081",
+        "http://localhost:8082", 
+        "http://127.0.0.1:8082",
+        "http://localhost:8083", 
+        "http://127.0.0.1:8083",
         "http://localhost:5173", 
         "http://127.0.0.1:5173"
     ]

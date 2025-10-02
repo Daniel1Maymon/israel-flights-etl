@@ -2,7 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useApiData } from "@/hooks/useApiData";
-import { Calendar, MapPin, Clock } from "lucide-react";
+import { Calendar, MapPin, Clock, Plane } from "lucide-react";
 import { getAllDestinations } from "@/lib/mockData";
 
 interface DashboardFiltersProps {
@@ -12,6 +12,8 @@ interface DashboardFiltersProps {
   onDateRangeChange: (dateRange: string) => void;
   selectedDayOfWeek: string;
   onDayOfWeekChange: (dayOfWeek: string) => void;
+  selectedAirline: string;
+  onAirlineChange: (airline: string) => void;
 }
 
 export const DashboardFilters = ({ 
@@ -20,15 +22,30 @@ export const DashboardFilters = ({
   selectedDateRange,
   onDateRangeChange,
   selectedDayOfWeek,
-  onDayOfWeekChange
+  onDayOfWeekChange,
+  selectedAirline,
+  onAirlineChange
 }: DashboardFiltersProps) => {
   const { t, isRTL } = useLanguage();
   
   // Fetch real destinations from API
   const { data: destinationsData, loading: destinationsLoading, error: destinationsError } = useApiData('http://localhost:8000/api/v1/destinations');
   
+  // Fetch real airlines from API
+  const { data: airlinesData, loading: airlinesLoading, error: airlinesError } = useApiData('http://localhost:8000/api/v1/flights/airlines');
+  
   // Use real destinations if available, fallback to mock data
-  const destinations = destinationsData && destinationsData.length > 0 ? destinationsData : getAllDestinations();
+  const destinations = destinationsData && destinationsData.length > 0 
+    ? destinationsData.map((dest: any) => dest.destination || dest)
+    : getAllDestinations();
+  
+  // Use real airlines if available, fallback to empty array, sorted alphabetically
+  const airlines = airlinesData && airlinesData.length > 0 
+    ? airlinesData
+        .map((airline: any) => airline.airline_name || airline.name)
+        .filter((name: string) => name && name.trim() !== '') // Filter out empty names
+        .sort((a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())) // Sort alphabetically
+    : [];
 
   return (
     <Card className="bg-gradient-to-r from-primary/5 to-info/5 border border-primary/20">
@@ -95,6 +112,28 @@ export const DashboardFilters = ({
                 <SelectItem value="friday">{t('filters.friday')}</SelectItem>
                 <SelectItem value="saturday">{t('filters.saturday')}</SelectItem>
                 <SelectItem value="sunday">{t('filters.sunday')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3 flex-1">
+          <Plane className="h-5 w-5 text-primary" />
+          <div className="flex-1">
+            <label className="text-sm font-medium text-foreground mb-1 block text-left">
+              {t('filters.airline')}
+            </label>
+            <Select value={selectedAirline} onValueChange={onAirlineChange}>
+              <SelectTrigger className="w-full bg-background border-border">
+                <SelectValue placeholder={t('filters.selectAirline')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">{t('filters.allAirlines')}</SelectItem>
+                {airlines.map((airline) => (
+                  <SelectItem key={airline} value={airline}>
+                    {airline}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

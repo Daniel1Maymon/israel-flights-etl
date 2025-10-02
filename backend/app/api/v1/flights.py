@@ -238,7 +238,7 @@ async def get_flight_stats(
                 Flight.airline_name,
                 func.count(Flight.flight_id).label('total_flights'),
                 func.avg(Flight.delay_minutes).label('avg_delay')
-            ).all()
+            ).limit(200).all()  # SECURITY: Limit to prevent data dump
             by_airline = [
                 {
                     "airline_code": row.airline_code,
@@ -261,7 +261,7 @@ async def get_flight_stats(
                 Flight.country_en,
                 Flight.country_he,
                 func.count(Flight.flight_id).label('total_flights')
-            ).all()
+            ).limit(200).all()  # SECURITY: Limit to prevent data dump
             by_destination = [
                 {
                     "location_iata": row.location_iata,
@@ -298,14 +298,20 @@ async def get_flight_stats(
     "/airlines",
     response_model=List[AirlineInfo],
     summary="List airlines",
-    description="Get list of unique airlines"
+    description="Get list of unique airlines with pagination"
 )
 async def list_airlines(
     search: Optional[str] = Query(None, description="Search airline names"),
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(50, ge=1, le=200, description="Items per page"),
     db: Session = Depends(get_database)
 ):
-    """Get list of unique airlines"""
+    """Get list of unique airlines with pagination"""
     try:
+        # Validate pagination parameters
+        page = validate_page_number(page)
+        size = validate_page_size(size)
+        
         query = db.query(
             Flight.airline_code,
             Flight.airline_name,
@@ -317,7 +323,12 @@ async def list_airlines(
                 func.lower(Flight.airline_name).contains(search.lower())
             )
         
-        airlines = query.all()
+        # Get total count
+        total = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * size
+        airlines = query.offset(offset).limit(size).all()
         
         return [
             AirlineInfo(
@@ -340,15 +351,21 @@ async def list_airlines(
     "/destinations",
     response_model=List[DestinationInfo],
     summary="List destinations",
-    description="Get list of unique destinations"
+    description="Get list of unique destinations with pagination"
 )
 async def list_destinations(
     search: Optional[str] = Query(None, description="Search destination names"),
     country: Optional[str] = Query(None, description="Filter by country"),
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(50, ge=1, le=200, description="Items per page"),
     db: Session = Depends(get_database)
 ):
-    """Get list of unique destinations"""
+    """Get list of unique destinations with pagination"""
     try:
+        # Validate pagination parameters
+        page = validate_page_number(page)
+        size = validate_page_size(size)
+        
         query = db.query(
             Flight.location_iata,
             Flight.location_en,
@@ -380,7 +397,12 @@ async def list_destinations(
                 func.lower(Flight.country_en).contains(country.lower())
             )
         
-        destinations = query.all()
+        # Get total count
+        total = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * size
+        destinations = query.offset(offset).limit(size).all()
         
         return [
             DestinationInfo(
