@@ -1,82 +1,162 @@
-# Israel Flights ETL Project
+# Israel Flights ETL System
 
-A modular data pipeline for processing Israeli flight data with Airflow, backend API, and frontend dashboard.
+A comprehensive end-to-end data pipeline for processing and visualizing Israeli flight data with advanced analytics, real-time filtering, and production-ready features.
 
-## Project Structure
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker and Docker Compose
+- Python 3.8+ (for local development)
+- Node.js 16+ (for frontend development)
+
+### Running the Complete System
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd israel-flights-etl
+   ```
+
+2. **Start all services with Docker Compose:**
+   ```bash
+   # Start ETL pipeline (Airflow + PostgreSQL)
+   cd airflow && docker-compose up -d
+   
+   # Start Backend API
+   cd ../backend && docker-compose up -d
+   
+   # Start Frontend (development)
+   cd ../frontend && npm install && npm run dev
+   ```
+
+3. **Access the applications:**
+   - **Frontend Dashboard**: http://localhost:3000
+   - **Backend API**: http://localhost:8000
+   - **API Documentation**: http://localhost:8000/docs
+   - **Airflow UI**: http://localhost:8080
+
+## 📁 Project Structure
 
 ```
 israel-flights-etl/
-├── airflow/          # ETL Pipeline (Apache Airflow)
-│   ├── dags/         # Airflow DAGs
-│   ├── etl/          # ETL scripts
-│   ├── utils/        # Utility functions
-│   ├── data/         # Data files
-│   └── docker-compose.yaml
-├── backend/          # API Backend (to be implemented)
-└── frontend/         # React Dashboard
+├── docs/                       # 📚 All documentation
+├── airflow/                    # 🔄 ETL Pipeline (Airflow)
+├── backend/                    # 🚀 FastAPI Backend
+├── frontend/                   # 🎨 React Frontend
+├── data/                       # 📊 Data storage
+└── utils/                      # 🛠️ Shared utilities
 ```
 
-## Project Flow
+## 🏗️ Architecture Overview
 
-```
-Israeli API → Airflow ETL → PostgreSQL → Backend API → React Dashboard
-     ↓              ↓           ↓
-   S3 Storage    S3 Storage   Monitoring
-```
+**Data Flow**: CKAN API → S3 (raw) → Airflow (ETL) → PostgreSQL (clean) → FastAPI (serve) → React (visualize)
 
-## Quick Start
+### Key Components
 
-### Airflow ETL Pipeline
+- **ETL Pipeline**: Automated data extraction, transformation, and loading every 15 minutes
+- **Backend API**: 15+ RESTful endpoints with advanced filtering and analytics
+- **Frontend Dashboard**: Interactive React dashboard with real-time data switching
+- **Analytics Engine**: Sophisticated airline performance KPIs and data quality assessment
 
-1. Navigate to the airflow directory:
-   ```bash
-   cd airflow
-   ```
+## 📚 Documentation
 
-2. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
+All project documentation is organized in the [`docs/`](docs/) folder:
 
-3. Access Airflow UI:
-   - URL: http://localhost:8080
-   - Username: `admin`
-   - Password: `admin`
+- **[📋 Documentation Index](docs/INDEX.md)** - Complete documentation overview
+- **[🏗️ System Architecture](docs/BACKEND_SYSTEM_DESIGN.md)** - Detailed architecture and design
+- **[📋 Project Tasks](docs/PROJECT_TASKS.md)** - Current development priorities
+- **[🎯 Backend API](docs/BACKEND_SPECIFICATION.md)** - API specification and endpoints
+- **[🎨 Frontend Guide](docs/FRONTEND_README.md)** - Frontend documentation
+
+## ✨ Features
+
+### ETL Pipeline
+- **Automated Data Extraction** from Israel's official flight data API
+- **Data Validation** and quality checks at each stage
+- **S3 Storage** for raw and processed data versioning
+- **PostgreSQL Integration** with upsert logic for data consistency
+
+### Backend API
+- **15+ RESTful Endpoints** for comprehensive data access
+- **Advanced Filtering** by airline, destination, date, status, and more
+- **Real-time Analytics** with airline performance KPIs
+- **Production-Ready** with logging, error handling, and health checks
 
 ### Frontend Dashboard
+- **Interactive Data Visualization** with real-time updates
+- **Multi-language Support** (Hebrew/English)
+- **Theme Switching** (Light/Dark mode)
+- **Advanced Filtering** and search capabilities
+- **Responsive Design** for all device sizes
 
-1. Navigate to the frontend directory:
+## 🛠️ Development
+
+### Local Development Setup
+
+1. **Backend Development:**
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   python -m app.main
+   ```
+
+2. **Frontend Development:**
    ```bash
    cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
    npm install
-   ```
-
-3. Start development server:
-   ```bash
    npm run dev
    ```
 
-## Database Access
+3. **ETL Pipeline Development:**
+   ```bash
+   cd airflow
+   # Follow Airflow setup instructions in docs/
+   ```
 
-- **Host**: localhost
-- **Port**: 5433
-- **Database**: flights_db
-- **Username**: daniel
-- **Password**: daniel
+### Testing
 
-## Data
+- **Backend Tests**: `cd backend && python test_basic.py`
+- **Frontend Tests**: `cd frontend && npm test`
+- **API Testing**: Visit http://localhost:8000/docs for interactive testing
 
-The pipeline processes Israeli flight data and stores it in PostgreSQL. Currently contains ~9,909 flight records.
+## 🚀 Deployment
 
-## Environment Variables
+### Production Deployment
 
-Create a `.env` file in the root directory with:
-- AWS credentials
-- PostgreSQL credentials
-- S3 bucket configuration
+The system is designed for cloud deployment with:
+- **Container Orchestration** (Docker Swarm/Kubernetes)
+- **Database Scaling** (PostgreSQL with connection pooling)
+- **Load Balancing** (Nginx/HAProxy)
+- **Monitoring** (Prometheus/Grafana)
 
-See `.env.example` for reference.
+See [docs/BACKEND_SYSTEM_DESIGN.md](docs/BACKEND_SYSTEM_DESIGN.md) for detailed deployment architecture.
+
+## 📊 Data Sources
+
+- **Primary Source**: [Israel Open Data Portal](https://data.gov.il) - Flight data API
+- **Data Format**: JSON with 1000+ records per batch
+- **Update Frequency**: Every 15 minutes via Airflow DAG
+- **Data Quality**: Automated validation and completeness checks
+
+## 🤝 Contributing
+
+1. Review [docs/RULES.md](docs/RULES.md) for development guidelines
+2. Check [docs/PROJECT_TASKS.md](docs/PROJECT_TASKS.md) for current priorities
+3. Follow the architecture patterns in [docs/BACKEND_SYSTEM_DESIGN.md](docs/BACKEND_SYSTEM_DESIGN.md)
+
+## 📄 License
+
+This project is licensed under the terms specified in [docs/LICENSE](docs/LICENSE).
+
+## 🆘 Support
+
+For questions and issues:
+1. Check the [documentation](docs/INDEX.md)
+2. Review [troubleshooting guides](docs/BACKEND_SYSTEM_DESIGN.md#troubleshooting)
+3. Check application logs and health endpoints
+
+---
+
+**Built with ❤️ for the Israeli aviation community**

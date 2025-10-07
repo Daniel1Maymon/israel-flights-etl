@@ -1,3 +1,49 @@
+# Israel Flights ETL – Architecture Overview (Live Document)
+
+## 1. Goal
+End-to-end public data pipeline for Israel flight data (ETL → API → Dashboard) with advanced analytics, real-time filtering, and production-ready features.
+
+## 2. Data Flow (Macro)
+CKAN API → S3 (raw) → Airflow (ETL) → PostgreSQL (clean) → FastAPI (serve) → React (visualize)
+
+## 3. Functional Map (Micro)
+- airflow/etl/extract.py → fetches new flight data from CKAN API with validation
+- airflow/etl/transform.py → cleans records, adds delay_minutes, data quality checks
+- airflow/utils/db_utils.py → loads transformed data into PostgreSQL with upsert logic
+- backend/app/api/flights.py → serves flight data with advanced filtering and pagination
+- backend/app/api/airline_endpoints.py → provides airline analytics and KPI calculations
+- backend/app/api/destinations.py → serves destination data for filters
+- backend/app/services/airline_aggregation.py → calculates airline performance metrics
+- frontend/src/pages/Index.tsx → displays interactive dashboard with real-time data switching
+- frontend/src/components/ → modular UI components with multi-language and theme support
+
+## 4. Decision Log
+- Database: PostgreSQL chosen for relational integrity and Docker simplicity  
+- Orchestration: Airflow for 15-minute automation and monitoring with retry logic
+- Storage: S3 chosen for low-cost versioned raw storage with processed data
+- API: FastAPI chosen for async support with structured logging and error handling
+- Frontend: React chosen for rapid UI iteration with TypeScript and Tailwind CSS
+- Analytics: Custom aggregation service for airline KPIs and performance metrics
+- Validation: Data quality assessment and completeness checks at each ETL stage
+- Production: Structured logging, health checks, CORS middleware, and error handling
+
+## 5. Current Status / Evolution
+v0.3 – Airflow DAG stable, DB sync verified  
+v0.4 – Backend API online with 15+ endpoints and advanced filtering
+v0.5 – Airline analytics system with KPI calculations and data quality scoring
+v0.6 – Frontend with real-time data switching, multi-language, and theme support
+Next: Cloud deployment + default Hebrew/light theme + performance optimization
+
+## 6. Validation Rule for Cursor Agent
+Whenever Cursor modifies code, verify:
+1. File purpose matches section **3 – Functional Map**
+2. Change aligns with overall **Data Flow**
+3. New dependencies are logged in **Decision Log**
+4. Maintains production-ready features (logging, error handling, validation)
+5. Preserves advanced analytics capabilities and data quality checks
+
+---
+
 # Israel Flights Backend - System Design Summary
 
 > **ADHD-Friendly Guide**: Clear steps, visual flows, and bite-sized information

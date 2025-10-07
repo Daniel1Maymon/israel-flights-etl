@@ -165,14 +165,14 @@ const Index = () => {
         <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-primary">
-              {statsData.length}
+              {(airlineData as any)?.total_airlines || statsData.length}
             </div>
             <div className="text-sm text-muted-foreground">{t('airline.total')}</div>
           </div>
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-success">
               {realAirlines.length > 0 
-                ? realAirlines.reduce((sum: number, airline: any) => sum + airline.total_flights, 0).toLocaleString()
+                ? (airlineData as any)?.total_flights?.toLocaleString() || realAirlines.reduce((sum: number, airline: any) => sum + airline.total_flights, 0).toLocaleString()
                 : statsData.reduce((sum, airline) => sum + airline.flightCount, 0).toLocaleString()
               }
             </div>

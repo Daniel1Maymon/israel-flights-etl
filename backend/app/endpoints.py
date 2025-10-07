@@ -6,3 +6,4 @@ from app.api.router import api_router
 
 # Export the main router for backward compatibility
 router = api_router
+

@@ -66,3 +66,4 @@ async def list_destinations(
             status_code=500,
             detail="Failed to retrieve destinations"
         )
+
