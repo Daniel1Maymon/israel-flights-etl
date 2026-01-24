@@ -11,6 +11,7 @@ import { useApiData } from "@/hooks/useApiData";
 import { usePaginatedFlights } from "@/hooks/usePaginatedFlights";
 import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines } from "@/lib/mockData";
 import { Plane, BarChart3 } from "lucide-react";
+import { API_ENDPOINTS } from "@/config/api";
 
 const Index = () => {
   const [selectedDestination, setSelectedDestination] = useState("All");
@@ -39,10 +40,10 @@ const Index = () => {
   };
 
   // API endpoints
-  const FLIGHTS_API_ENDPOINT = isDatabaseMode ? 'http://localhost:8000/api/v1/flights/' : '';
-  const AIRLINES_API_ENDPOINT = `http://localhost:8000/api/v1/airlines/stats${buildQueryParams() ? `?${buildQueryParams()}` : ''}`;
+  const FLIGHTS_API_ENDPOINT = isDatabaseMode ? `${API_ENDPOINTS.FLIGHTS}/` : '';
+  const AIRLINES_API_ENDPOINT = `${API_ENDPOINTS.AIRLINES_STATS}${buildQueryParams() ? `?${buildQueryParams()}` : ''}`;
   const AIRLINE_DESTINATIONS_ENDPOINT = selectedAirline !== 'All' 
-    ? `http://localhost:8000/api/v1/airlines/${encodeURIComponent(selectedAirline)}/destinations${buildQueryParams() ? `?${buildQueryParams()}` : ''}`
+    ? `${API_ENDPOINTS.AIRLINE_DESTINATIONS(selectedAirline)}${buildQueryParams() ? `?${buildQueryParams()}` : ''}`
     : '';
   
   // Fetch flight data from API when in database mode

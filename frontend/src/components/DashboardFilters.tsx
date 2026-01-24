@@ -4,6 +4,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useApiData } from "@/hooks/useApiData";
 import { Calendar, MapPin, Clock, Plane } from "lucide-react";
 import { getAllDestinations } from "@/lib/mockData";
+import { API_ENDPOINTS } from "@/config/api";
 
 interface DashboardFiltersProps {
   selectedDestination: string;
@@ -29,10 +30,10 @@ export const DashboardFilters = ({
   const { t, isRTL } = useLanguage();
   
   // Fetch real destinations from API
-  const { data: destinationsData, loading: destinationsLoading, error: destinationsError } = useApiData('http://localhost:8000/api/v1/destinations');
+  const { data: destinationsData, loading: destinationsLoading, error: destinationsError } = useApiData(API_ENDPOINTS.DESTINATIONS);
   
   // Fetch real airlines from API
-  const { data: airlinesData, loading: airlinesLoading, error: airlinesError } = useApiData('http://localhost:8000/api/v1/flights/airlines');
+  const { data: airlinesData, loading: airlinesLoading, error: airlinesError } = useApiData(API_ENDPOINTS.AIRLINES);
   
   // Use real destinations if available, fallback to mock data
   const destinations = destinationsData && destinationsData.length > 0 
