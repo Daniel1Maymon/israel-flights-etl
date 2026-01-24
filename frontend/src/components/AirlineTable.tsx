@@ -1,4 +1,4 @@
-import { AirlineKPI } from "@/lib/mockData";
+import { AirlineKPI } from "@/lib/mockData.ts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

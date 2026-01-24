@@ -9,7 +9,7 @@ import { PaginatedFlightsTable } from "@/components/PaginatedFlightsTable";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useApiData } from "@/hooks/useApiData";
 import { usePaginatedFlights } from "@/hooks/usePaginatedFlights";
-import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines } from "@/lib/mockData";
+import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines } from "@/lib/mockData.ts";
 import { Plane, BarChart3 } from "lucide-react";
 import { API_ENDPOINTS } from "@/config/api";
 

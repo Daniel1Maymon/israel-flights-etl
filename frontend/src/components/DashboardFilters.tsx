@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useApiData } from "@/hooks/useApiData";
 import { Calendar, MapPin, Clock, Plane } from "lucide-react";
-import { getAllDestinations } from "@/lib/mockData";
+import { getAllDestinations } from "@/lib/mockData.ts";
 import { API_ENDPOINTS } from "@/config/api";
 
 interface DashboardFiltersProps {
