@@ -291,6 +291,29 @@ def load_to_db(**kwargs) -> None:
         logging.error(f"Error in load_to_db: {str(e)}")
         raise
 
+
+# Step 5: Optional DB backup to S3 (controlled by ENABLE_DB_BACKUPS=true)
+def backup_db(**kwargs) -> None:
+    """
+    Optional: create a pg_dump backup and upload it to S3.
+
+    Enable with:
+      ENABLE_DB_BACKUPS=true
+    """
+    try:
+        from etl.backup_postgres import backup_flights_db_to_s3
+
+        result = backup_flights_db_to_s3()
+        logging.info(f"DB backup result: {result}")
+
+        ti = kwargs.get("ti")
+        if ti and isinstance(result, dict) and "s3_key" in result:
+            ti.xcom_push(key="db_backup_s3_key", value=result["s3_key"])
+
+    except Exception as e:
+        logging.error(f"Error in backup_db: {str(e)}")
+        raise
+
 # ------------------------
 # DAG definition
 # ------------------------
@@ -325,6 +348,12 @@ with DAG(
         provide_context=True,
     )
 
+    backup_db_task = PythonOperator(
+        task_id="backup_db",
+        python_callable=backup_db,
+        provide_context=True,
+    )
+
     # Define dependencies
-    fetch_data_task >> validate_data_task >> transform_data_task >> load_to_db_task
+    fetch_data_task >> validate_data_task >> transform_data_task >> load_to_db_task >> backup_db_task
 

@@ -111,8 +111,8 @@ def upsert_flight_data(df: pd.DataFrame, pg_hook: PostgresHook) -> int:
                 str(row.get('airport_name_english', '')),
                 str(row.get('airport_name_hebrew', '')),
                 str(row.get('city_name_english', '')),
-                '',  # country_en - not in CSV
                 str(row.get('country_name_english', '')),
+                str(row.get('country_name_hebrew', '')),
                 int(row.get('terminal_number', 0)) if pd.notna(row.get('terminal_number', 0)) else None,
                 str(row.get('check_in_time', '')),
                 str(row.get('check_in_zone', '')),
@@ -132,13 +132,17 @@ def upsert_flight_data(df: pd.DataFrame, pg_hook: PostgresHook) -> int:
                 checkin_zone, status_en, status_he, delay_minutes, scrape_timestamp, raw_s3_path
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (flight_id) DO UPDATE SET
-                actual_time = EXCLUDED.actual_time,
+                actual_time = COALESCE(EXCLUDED.actual_time, flights.actual_time),
                 terminal = EXCLUDED.terminal,
                 checkin_counters = EXCLUDED.checkin_counters,
                 checkin_zone = EXCLUDED.checkin_zone,
                 status_en = EXCLUDED.status_en,
                 status_he = EXCLUDED.status_he,
-                delay_minutes = EXCLUDED.delay_minutes,
+                delay_minutes = CASE 
+                    WHEN EXCLUDED.actual_time IS NOT NULL AND flights.scheduled_time IS NOT NULL 
+                    THEN EXTRACT(EPOCH FROM (EXCLUDED.actual_time - flights.scheduled_time)) / 60
+                    ELSE flights.delay_minutes
+                END,
                 scrape_timestamp = EXCLUDED.scrape_timestamp,
                 raw_s3_path = EXCLUDED.raw_s3_path
         """, data_tuples)

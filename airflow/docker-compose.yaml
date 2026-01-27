@@ -1,77 +1,4 @@
 services:
-
-  # zookeeper:
-  #   container_name: zookeeper
-  #   image: bitnami/zookeeper:3.9.2
-  #   environment:
-  #     - ALLOW_ANONYMOUS_LOGIN=yes
-  #   ports:
-  #     - "2181:2181"
-
-  # course-kafka:
-  #   container_name: course-kafka
-  #   image: bitnami/kafka:3.7.0
-  #   environment:
-  #     - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-  #     - ALLOW_PLAINTEXT_LISTENER=yes
-  #     - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
-  #     - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://course-kafka:9092
-  #     - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-  #   ports:
-  #     - "9092:9092"
-  #   depends_on:
-  #     - zookeeper
-
-  # kafdrop:
-  #   container_name: kafdrop
-  #   image: obsidiandynamics/kafdrop:3.31.0
-  #   ports:
-  #     - "9003:9000"
-  #   environment:
-  #     - KAFKA_BROKERCONNECT=course-kafka:9092
-  #   depends_on:
-  #     - course-kafka
-
-  # python-app:
-  #   image: python:3.11-slim
-  #   container_name: python-kafka-container
-  #   command: tail -f /dev/null
-  #   volumes:
-  #     - ./app:/app
-  #   working_dir: /app
-  #   tty: true
-  #   stdin_open: true
-  #   entrypoint: >
-  #     sh -c "apt-get update &&
-  #            apt-get install -y vim nano &&
-  #            pip install --no-cache-dir -r requirements.txt &&
-  #            tail -f /dev/null"
-
-  # mongo:
-  #   image: mongo:8.0
-  #   container_name: mongo
-  #   volumes:
-  #     - ./data:/de_data
-  #   working_dir: /de_data
-  #   ports:
-  #     - "27017:27017"
-
-  # elasticsearch:
-  #   container_name: elasticsearch
-  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4-arm64
-  #   ports:
-  #     - "9200:9200"
-  #   environment:
-  #     - discovery.type=single-node
-
-  # kibana:
-  #   container_name: kibana
-  #   image: docker.elastic.co/kibana/kibana:8.13.4-arm64
-  #   ports:
-  #     - "5601:5601"
-  #   depends_on:
-  #     - elasticsearch
-
   postgres:
     container_name: postgres_airflow
     image: postgres:16.3
@@ -85,19 +12,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  postgres_flights:
-    container_name: postgres_flights
-    image: postgres:16.3
-    environment:
-      - POSTGRES_USER=daniel
-      - POSTGRES_PASSWORD=daniel
-      - POSTGRES_DB=flights_db
-      - POSTGRES_PORT=5432
-    ports:
-      - "5433:5432"
-    volumes:
-      - israel-flights-etl_postgres_flights_data:/var/lib/postgresql/data
-
   airflow-init:
     build:
       context: .
@@ -106,6 +20,8 @@ services:
     container_name: airflow_init
     depends_on:
       - postgres
+    external_links:
+      - postgres_flights:postgres_flights
     env_file:
       - .env
     environment:
@@ -160,6 +76,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    external_links:
+      - postgres_flights:postgres_flights
     env_file:
       - .env
     environment:
@@ -180,7 +98,7 @@ services:
     ports:
       - 8082:8080
     command: airflow webserver
-    restart: always
+    restart: "no"
 
   airflow-scheduler:
     build:
@@ -189,6 +107,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    external_links:
+      - postgres_flights:postgres_flights
     env_file:
       - .env
     environment:
@@ -213,7 +133,7 @@ services:
       - ./data:/opt/airflow/data
       - ./config:/opt/airflow/config
     command: airflow scheduler
-    restart: always
+    restart: "no"
 
 volumes:
   postgres_data:

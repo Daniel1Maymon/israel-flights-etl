@@ -11,17 +11,40 @@ services:
       - DB_USER=daniel
       - DB_PASSWORD=daniel
       - LOG_LEVEL=INFO
-    external_links:
-      - postgres_flights:postgres_flights
     volumes:
       - ./app:/app/app
     restart: unless-stopped
+    depends_on:
+      - postgres_flights
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  postgres_flights:
+    container_name: postgres_flights
+    image: postgres:16.3
+    environment:
+      - POSTGRES_USER=daniel
+      - POSTGRES_PASSWORD=daniel
+      - POSTGRES_DB=flights_db
+      - POSTGRES_PORT=5432
+    ports:
+      - "5433:5432"
+    volumes:
+      # IMPORTANT:
+      # - If `POSTGRES_FLIGHTS_DATA_DIR` is NOT set, this uses a named Docker volume (deleted by `docker-compose down -v`).
+      # - If `POSTGRES_FLIGHTS_DATA_DIR` IS set to an absolute path, this becomes a bind mount and will survive `down -v`.
+      - ${POSTGRES_FLIGHTS_DATA_DIR:-postgres_flights_data}:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daniel -d flights_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Redis for caching (currently not used in the application)
   # Uncomment when implementing caching features
@@ -41,3 +64,5 @@ services:
 # volumes:
 #   redis_data:
 
+volumes:
+  postgres_flights_data:

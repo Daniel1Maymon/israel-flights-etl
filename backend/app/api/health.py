@@ -3,6 +3,7 @@ Health and status endpoints
 """
 from fastapi import APIRouter
 import structlog
+import time
 
 logger = structlog.get_logger()
 
@@ -48,6 +49,8 @@ async def health_check():
 async def readiness_check():
     """Readiness check including database connectivity"""
     from app.database import check_db_connection
+    from app.database import engine
+    from sqlalchemy import text
     
     # Check database connection
     db_healthy = check_db_connection()
@@ -56,13 +59,28 @@ async def readiness_check():
         return {
             "status": "not_ready",
             "database": "unhealthy",
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
+
+    # Optional: include a lightweight data presence signal.
+    flights_rowcount = None
+    try:
+        with engine.connect() as conn:
+            flights_rowcount = conn.execute(text("SELECT COUNT(*) FROM flights")).scalar()
+    except Exception:
+        # If the table doesn't exist yet (or perms), keep readiness green but report unknown.
+        flights_rowcount = None
     
     return {
         "status": "ready",
         "database": "healthy",
-        "timestamp": time.time()
+        "flights_rowcount": flights_rowcount,
+        "data_status": (
+            "unknown"
+            if flights_rowcount is None
+            else ("empty" if int(flights_rowcount) == 0 else "ok")
+        ),
+        "timestamp": time.time(),
     }
 
 

@@ -62,11 +62,12 @@ israel-flights-etl/
 
 All project documentation is organized in the [`docs/`](docs/) folder:
 
-- **[📋 Documentation Index](docs/INDEX.md)** - Complete documentation overview
-- **[🏗️ System Architecture](docs/BACKEND_SYSTEM_DESIGN.md)** - Detailed architecture and design
-- **[📋 Project Tasks](docs/PROJECT_TASKS.md)** - Current development priorities
-- **[🎯 Backend API](docs/BACKEND_SPECIFICATION.md)** - API specification and endpoints
-- **[🎨 Frontend Guide](docs/FRONTEND_README.md)** - Frontend documentation
+- **[Project Guide](docs/guides/PROJECT_GUIDE.md)** - Complete end-to-end guide (setup, run, troubleshooting)
+- **[Services Summary](docs/services/SERVICES_SUMMARY.md)** - What each service does and how it’s used
+- **[System Architecture](docs/architecture/BACKEND_SYSTEM_DESIGN.md)** - Detailed architecture and design
+- **[Backend API Spec](docs/api/BACKEND_SPECIFICATION.md)** - API endpoints and behavior
+- **[Field Mapping](docs/reference/FIELD_MAPPING_TABLE.md)** - Source→target field mapping
+- **[EC2 Deployment](DEPLOYMENT.md)** - Deploy on a VM with Docker Compose
 
 ## ✨ Features
 
@@ -131,7 +132,7 @@ The system is designed for cloud deployment with:
 - **Load Balancing** (Nginx/HAProxy)
 - **Monitoring** (Prometheus/Grafana)
 
-See [docs/BACKEND_SYSTEM_DESIGN.md](docs/BACKEND_SYSTEM_DESIGN.md) for detailed deployment architecture.
+See [docs/architecture/BACKEND_SYSTEM_DESIGN.md](docs/architecture/BACKEND_SYSTEM_DESIGN.md) for detailed deployment architecture.
 
 ## 📊 Data Sources
 
@@ -142,9 +143,8 @@ See [docs/BACKEND_SYSTEM_DESIGN.md](docs/BACKEND_SYSTEM_DESIGN.md) for detailed 
 
 ## 🤝 Contributing
 
-1. Review [docs/RULES.md](docs/RULES.md) for development guidelines
-2. Check [docs/PROJECT_TASKS.md](docs/PROJECT_TASKS.md) for current priorities
-3. Follow the architecture patterns in [docs/BACKEND_SYSTEM_DESIGN.md](docs/BACKEND_SYSTEM_DESIGN.md)
+1. Start with [docs/guides/PROJECT_GUIDE.md](docs/guides/PROJECT_GUIDE.md)
+2. Follow the architecture patterns in [docs/architecture/BACKEND_SYSTEM_DESIGN.md](docs/architecture/BACKEND_SYSTEM_DESIGN.md)
 
 ## 📄 License
 
@@ -153,8 +153,8 @@ This project is licensed under the terms specified in [docs/LICENSE](docs/LICENS
 ## 🆘 Support
 
 For questions and issues:
-1. Check the [documentation](docs/INDEX.md)
-2. Review [troubleshooting guides](docs/BACKEND_SYSTEM_DESIGN.md#troubleshooting)
+1. Start with [docs/guides/PROJECT_GUIDE.md](docs/guides/PROJECT_GUIDE.md)
+2. Review [troubleshooting guides](docs/architecture/BACKEND_SYSTEM_DESIGN.md#troubleshooting)
 3. Check application logs and health endpoints
 
 ---

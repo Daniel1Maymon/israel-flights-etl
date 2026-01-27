@@ -1,0 +1,257 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for Airflow metadata
+  postgres_airflow:
+    container_name: postgres_airflow
+    image: postgres:16.3
+    environment:
+      - POSTGRES_USER=${POSTGRES_AIRFLOW_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_AIRFLOW_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_AIRFLOW_DB:-airflow}
+      - POSTGRES_PORT=5432
+    ports:
+      - "${POSTGRES_AIRFLOW_PORT:-5432}:5432"
+    volumes:
+      - postgres_airflow_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER:-postgres} -d ${POSTGRES_AIRFLOW_DB:-airflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - israel-flights-network
+
+  # PostgreSQL for flights data
+  postgres_flights:
+    container_name: postgres_flights
+    image: postgres:16.3
+    environment:
+      - POSTGRES_USER=${POSTGRES_FLIGHTS_USER:-daniel}
+      - POSTGRES_PASSWORD=${POSTGRES_FLIGHTS_PASSWORD:-daniel}
+      - POSTGRES_DB=${POSTGRES_FLIGHTS_DB:-flights_db}
+      - POSTGRES_PORT=5432
+    ports:
+      - "${POSTGRES_FLIGHTS_PORT:-5433}:5432"
+    volumes:
+      # IMPORTANT:
+      # - If `POSTGRES_FLIGHTS_DATA_DIR` is NOT set, this uses a named Docker volume (deleted by `docker-compose down -v`).
+      # - If `POSTGRES_FLIGHTS_DATA_DIR` IS set to an absolute path, this becomes a bind mount and will survive `down -v`.
+      - ${POSTGRES_FLIGHTS_DATA_DIR:-postgres_flights_data}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_FLIGHTS_USER:-daniel} -d ${POSTGRES_FLIGHTS_DB:-flights_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - israel-flights-network
+
+  # Airflow initialization (runs once)
+  airflow-init:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_init
+    depends_on:
+      postgres_airflow:
+        condition: service_healthy
+      postgres_flights:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER:-postgres}:${POSTGRES_AIRFLOW_PASSWORD:-postgres}@postgres_airflow:5432/${POSTGRES_AIRFLOW_DB:-airflow}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
+      - PYTHONPATH=/opt/airflow
+      - AIRFLOW__CONN__POSTGRES_FLIGHTS=postgres://${POSTGRES_FLIGHTS_USER:-daniel}:${POSTGRES_FLIGHTS_PASSWORD:-daniel}@postgres_flights:5432/${POSTGRES_FLIGHTS_DB:-flights_db}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/etl:/opt/airflow/etl
+      - ./airflow/utils:/opt/airflow/utils
+      - ./airflow/airflow-data/logs:/opt/airflow/logs
+      - ./airflow/airflow-data/plugins:/opt/airflow/plugins
+      - ./airflow/data:/opt/airflow/data
+      - ./airflow/config:/opt/airflow/config
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        until pg_isready -h postgres_airflow -p 5432 -U ${POSTGRES_AIRFLOW_USER:-postgres}; do
+          echo "Waiting for Postgres Airflow..."
+          sleep 2
+        done
+        until pg_isready -h postgres_flights -p 5432 -U ${POSTGRES_FLIGHTS_USER:-daniel}; do
+          echo "Waiting for Postgres Flights..."
+          sleep 2
+        done
+        echo "Postgres databases are ready."
+        airflow db migrate
+        airflow users list | grep -q "airflow" || \
+        airflow users create \
+          --role Admin \
+          --username ${AIRFLOW_USERNAME:-airflow} \
+          --password ${AIRFLOW_PASSWORD:-airflow} \
+          --email ${AIRFLOW_EMAIL:-airflow@airflow.com} \
+          --firstname ${AIRFLOW_FIRSTNAME:-airflow} \
+          --lastname ${AIRFLOW_LASTNAME:-airflow}
+        echo "Airflow initialization completed."
+    restart: "no"
+    networks:
+      - israel-flights-network
+
+  # Airflow webserver
+  airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_webserver
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres_airflow:
+        condition: service_healthy
+      postgres_flights:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER:-postgres}:${POSTGRES_AIRFLOW_PASSWORD:-postgres}@postgres_airflow:5432/${POSTGRES_AIRFLOW_DB:-airflow}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
+      - PYTHONPATH=/opt/airflow
+      - AIRFLOW__CONN__POSTGRES_FLIGHTS=postgres://${POSTGRES_FLIGHTS_USER:-daniel}:${POSTGRES_FLIGHTS_PASSWORD:-daniel}@postgres_flights:5432/${POSTGRES_FLIGHTS_DB:-flights_db}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/etl:/opt/airflow/etl
+      - ./airflow/utils:/opt/airflow/utils
+      - ./airflow/airflow-data/logs:/opt/airflow/logs
+      - ./airflow/airflow-data/plugins:/opt/airflow/plugins
+      - ./airflow/data:/opt/airflow/data
+      - ./airflow/config:/opt/airflow/config
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT:-8082}:8080"
+    command: airflow webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - israel-flights-network
+
+  # Airflow scheduler
+  airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres_airflow:
+        condition: service_healthy
+      postgres_flights:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER:-postgres}:${POSTGRES_AIRFLOW_PASSWORD:-postgres}@postgres_airflow:5432/${POSTGRES_AIRFLOW_DB:-airflow}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__LOGGING__LOGGING_LEVEL=INFO
+      - PYTHONPATH=/opt/airflow
+      - AIRFLOW__CONN__POSTGRES_FLIGHTS=postgres://${POSTGRES_FLIGHTS_USER:-daniel}:${POSTGRES_FLIGHTS_PASSWORD:-daniel}@postgres_flights:5432/${POSTGRES_FLIGHTS_DB:-flights_db}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/etl:/opt/airflow/etl
+      - ./airflow/utils:/opt/airflow/utils
+      - ./airflow/airflow-data/logs:/opt/airflow/logs
+      - ./airflow/airflow-data/plugins:/opt/airflow/plugins
+      - ./airflow/data:/opt/airflow/data
+      - ./airflow/config:/opt/airflow/config
+    command: airflow scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $$(hostname)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - israel-flights-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_api
+    depends_on:
+      postgres_flights:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_FLIGHTS_USER:-daniel}:${POSTGRES_FLIGHTS_PASSWORD:-daniel}@postgres_flights:5432/${POSTGRES_FLIGHTS_DB:-flights_db}
+      - DB_HOST=postgres_flights
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_FLIGHTS_DB:-flights_db}
+      - DB_USER=${POSTGRES_FLIGHTS_USER:-daniel}
+      - DB_PASSWORD=${POSTGRES_FLIGHTS_PASSWORD:-daniel}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:80,http://localhost:8000}
+    volumes:
+      - ./backend/app:/app/app
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - israel-flights-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+    container_name: frontend_app
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - israel-flights-network
+
+volumes:
+  postgres_airflow_data:
+    driver: local
+  postgres_flights_data:
+    driver: local
+
+networks:
+  israel-flights-network:
+    driver: bridge
