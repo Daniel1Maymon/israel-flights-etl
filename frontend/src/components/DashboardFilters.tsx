@@ -1,143 +1,188 @@
+import { useState, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { BarChart3, Calendar, MapPin, Plane, RotateCcw } from "lucide-react";
+import { UnifiedSearch } from "@/components/UnifiedSearch";
 import { useApiData } from "@/hooks/useApiData";
-import { Calendar, MapPin, Clock, Plane } from "lucide-react";
-import { getAllDestinations } from "@/lib/mockData.ts";
 import { API_ENDPOINTS } from "@/config/api";
 
+type SearchType = "airline" | "airport" | "country" | "city";
+
 interface DashboardFiltersProps {
-  selectedDestination: string;
-  onDestinationChange: (destination: string) => void;
-  selectedDateRange: string;
-  onDateRangeChange: (dateRange: string) => void;
-  selectedDayOfWeek: string;
-  onDayOfWeekChange: (dayOfWeek: string) => void;
+  selectedAirport: string;
+  onAirportChange: (airport: string) => void;
   selectedAirline: string;
   onAirlineChange: (airline: string) => void;
+  selectedSearch: string;
+  onSearchChange: (search: string, type: SearchType) => void;
+  selectedDateRange: string;
+  onDateRangeChange: (dateRange: string) => void;
+  topLimit: number;
+  onTopLimitChange: (limit: number) => void;
+  onReset: () => void;
+  resetSignal?: number;
 }
 
 export const DashboardFilters = ({ 
-  selectedDestination, 
-  onDestinationChange,
+  selectedAirport,
+  onAirportChange,
+  selectedAirline,
+  onAirlineChange,
+  selectedSearch,
+  onSearchChange,
   selectedDateRange,
   onDateRangeChange,
-  selectedDayOfWeek,
-  onDayOfWeekChange,
-  selectedAirline,
-  onAirlineChange
+  topLimit,
+  onTopLimitChange,
+  onReset,
+  resetSignal
 }: DashboardFiltersProps) => {
   const { t, isRTL } = useLanguage();
-  
-  // Fetch real destinations from API
-  const { data: destinationsData, loading: destinationsLoading, error: destinationsError } = useApiData(API_ENDPOINTS.DESTINATIONS);
-  
-  // Fetch real airlines from API
-  const { data: airlinesData, loading: airlinesLoading, error: airlinesError } = useApiData(API_ENDPOINTS.AIRLINES);
-  
-  // Use real destinations if available, fallback to mock data
-  const destinations = destinationsData && destinationsData.length > 0 
-    ? destinationsData.map((dest: any) => dest.destination || dest)
-    : getAllDestinations();
-  
-  // Use real airlines if available, fallback to empty array, sorted alphabetically
-  const airlines = airlinesData && airlinesData.length > 0 
-    ? airlinesData
-        .map((airline: any) => airline.airline_name || airline.name)
-        .filter((name: string) => name && name.trim() !== '') // Filter out empty names
-        .sort((a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())) // Sort alphabetically
-    : [];
+
+  // Fetch airports and airlines for dropdowns
+  const { data: destinationsData } = useApiData(API_ENDPOINTS.DESTINATIONS);
+  const { data: airlinesData } = useApiData(API_ENDPOINTS.AIRLINES);
+
+  // Process airports
+  const allAirports = useMemo(() => {
+    if (!destinationsData || destinationsData.length === 0) return [];
+    const destinations = Array.isArray(destinationsData) 
+      ? destinationsData 
+      : (destinationsData as any)?.destinations || [];
+    return destinations
+      .map((dest: any) => dest.destination || dest)
+      .filter((dest: string) => dest && dest.trim() !== '')
+      .sort((a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }, [destinationsData]);
+
+  // Process airlines
+  const allAirlines = useMemo(() => {
+    if (!airlinesData || airlinesData.length === 0) return [];
+    return airlinesData
+      .map((airline: any) => ({
+        code: airline.airline_code || airline.code || '',
+        name: airline.airline_name || airline.name || ''
+      }))
+      .filter((airline: { code: string; name: string }) => airline.name && airline.name.trim() !== '')
+      .filter((airline: { code: string; name: string }, index: number, self: { code: string; name: string }[]) => 
+        index === self.findIndex((a: { code: string; name: string }) => a.name.toLowerCase() === airline.name.toLowerCase())
+      )
+      .sort((a: { code: string; name: string }, b: { code: string; name: string }) => 
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      )
+      .map((a: { code: string; name: string }) => a.name);
+  }, [airlinesData]);
+
+  const topLimitOptions = [5, 10, 15, 20];
 
   return (
     <Card className="bg-gradient-to-r from-primary/5 to-info/5 border border-primary/20">
       <CardContent className="flex flex-col sm:flex-row gap-4 p-6">
-        <div className="flex items-center gap-3 flex-1">
-          <MapPin className="h-5 w-5 text-primary" />
-          <div className="flex-1">
-            <label className="text-sm font-medium text-foreground mb-1 block text-left">
-              {t('filters.destination')}
-            </label>
-            <Select value={selectedDestination} onValueChange={onDestinationChange}>
-              <SelectTrigger className="w-full bg-background border-border">
-                <SelectValue placeholder={t('filters.selectDestination')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">{t('filters.allDestinations')}</SelectItem>
-                {destinations.map((destination) => (
-                  <SelectItem key={destination} value={destination}>
-                    {destination}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Airport Dropdown */}
+        <div className="flex-1">
+          <label className="text-sm font-medium text-foreground mb-1 block text-left flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-primary" />
+            {t('filters.airport') || "Airport"}
+          </label>
+          <Select value={selectedAirport} onValueChange={onAirportChange}>
+            <SelectTrigger className="w-full bg-background border-border">
+              <SelectValue placeholder={t('filters.all') || "All"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">{t('filters.all') || "All"}</SelectItem>
+              {allAirports.map((airport: string) => (
+                <SelectItem key={airport} value={airport}>
+                  {airport}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        
-        <div className="flex items-center gap-3 flex-1">
-          <Calendar className="h-5 w-5 text-primary" />
-          <div className="flex-1">
-            <label className="text-sm font-medium text-foreground mb-1 block text-left">
-              {t('filters.dateRange')}
-            </label>
-            <Select value={selectedDateRange} onValueChange={onDateRangeChange}>
-              <SelectTrigger className="w-full bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all-time">{t('filters.allTime')}</SelectItem>
-                <SelectItem value="last-7-days">{t('filters.last7Days')}</SelectItem>
-                <SelectItem value="last-30-days">{t('filters.last30Days')}</SelectItem>
-                <SelectItem value="last-90-days">{t('filters.last90Days')}</SelectItem>
-                <SelectItem value="last-year">{t('filters.lastYear')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+
+        {/* Airline Dropdown */}
+        <div className="flex-1">
+          <label className="text-sm font-medium text-foreground mb-1 block text-left flex items-center gap-2">
+            <Plane className="h-4 w-4 text-primary" />
+            {t('filters.airline') || "Airline"}
+          </label>
+          <Select value={selectedAirline} onValueChange={onAirlineChange}>
+            <SelectTrigger className="w-full bg-background border-border">
+              <SelectValue placeholder={t('filters.all') || "All"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">{t('filters.all') || "All"}</SelectItem>
+              {allAirlines.map((airline: string) => (
+                <SelectItem key={airline} value={airline}>
+                  {airline}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Search Bar with Airport/Country/City/Airline options */}
+        <UnifiedSearch
+          selectedValue={selectedSearch}
+          onValueChange={onSearchChange}
+          label={t('common.search') || "Search"}
+          allowedTypes={["airport", "country", "city", "airline"]}
+          defaultType="airport"
+          resetSignal={resetSignal}
+        />
         
-        <div className="flex items-center gap-3 flex-1">
-          <Clock className="h-5 w-5 text-primary" />
-          <div className="flex-1">
-            <label className="text-sm font-medium text-foreground mb-1 block text-left">
-              {t('filters.dayOfWeek')}
-            </label>
-            <Select value={selectedDayOfWeek} onValueChange={onDayOfWeekChange}>
-              <SelectTrigger className="w-full bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all-days">{t('filters.allDays')}</SelectItem>
-                <SelectItem value="monday">{t('filters.monday')}</SelectItem>
-                <SelectItem value="tuesday">{t('filters.tuesday')}</SelectItem>
-                <SelectItem value="wednesday">{t('filters.wednesday')}</SelectItem>
-                <SelectItem value="thursday">{t('filters.thursday')}</SelectItem>
-                <SelectItem value="friday">{t('filters.friday')}</SelectItem>
-                <SelectItem value="saturday">{t('filters.saturday')}</SelectItem>
-                <SelectItem value="sunday">{t('filters.sunday')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Date Range */}
+        <div className="flex-1">
+          <label className="text-sm font-medium text-foreground mb-1 block text-left flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" />
+            {t('filters.dateRange')}
+          </label>
+          <Select value={selectedDateRange} onValueChange={onDateRangeChange}>
+            <SelectTrigger className="w-full bg-background border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all-time">{t('filters.allTime')}</SelectItem>
+              <SelectItem value="last-7-days">{t('filters.last7Days')}</SelectItem>
+              <SelectItem value="last-30-days">{t('filters.last30Days')}</SelectItem>
+              <SelectItem value="last-90-days">{t('filters.last90Days')}</SelectItem>
+              <SelectItem value="last-year">{t('filters.lastYear')}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        
-        <div className="flex items-center gap-3 flex-1">
-          <Plane className="h-5 w-5 text-primary" />
-          <div className="flex-1">
-            <label className="text-sm font-medium text-foreground mb-1 block text-left">
-              {t('filters.airline')}
-            </label>
-            <Select value={selectedAirline} onValueChange={onAirlineChange}>
-              <SelectTrigger className="w-full bg-background border-border">
-                <SelectValue placeholder={t('filters.selectAirline')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">{t('filters.allAirlines')}</SelectItem>
-                {airlines.map((airline) => (
-                  <SelectItem key={airline} value={airline}>
-                    {airline}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
+        {/* Top/Bottom Count */}
+        <div className="flex-1">
+          <label className="text-sm font-medium text-foreground mb-1 block text-left flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            {t('filters.topCount')}
+          </label>
+          <Select value={String(topLimit)} onValueChange={(value) => onTopLimitChange(Number(value))}>
+            <SelectTrigger className="w-full bg-background border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {topLimitOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-end">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-10 text-xs px-3"
+            onClick={onReset}
+          >
+            <RotateCcw className="h-3 w-3 mr-1.5" />
+            {t('common.clear') || "Clear"}
+          </Button>
         </div>
       </CardContent>
     </Card>

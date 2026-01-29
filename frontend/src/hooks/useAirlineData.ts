@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { API_ENDPOINTS } from '@/config/api';
 
 // Define the interface for airline KPI data from the backend
 interface AirlineKPI {
@@ -179,7 +180,10 @@ export const useTopBottomAirlines = (endpoint: string) => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchTopBottom = async () => {
-    if (!endpoint) {
+    // Use the dedicated top-bottom endpoint
+    const topBottomEndpoint = API_ENDPOINTS.AIRLINES_TOP_BOTTOM;
+    
+    if (!topBottomEndpoint) {
       setTopAirlines([]);
       setBottomAirlines([]);
       setLoading(false);
@@ -191,7 +195,8 @@ export const useTopBottomAirlines = (endpoint: string) => {
     setError(null);
     
     try {
-      const response = await fetch(`${endpoint}/top-bottom`);
+      // Use the correct top-bottom endpoint
+      const response = await fetch(topBottomEndpoint);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

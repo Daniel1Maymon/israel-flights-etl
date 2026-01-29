@@ -57,6 +57,17 @@ const translations = {
     'filters.airline': 'Airline',
     'filters.selectAirline': 'Select airline',
     'filters.allAirlines': 'All Airlines',
+    'filters.searchAirline': 'Search airline...',
+    'filters.searchDestination': 'Search destination...',
+    'filters.searchAirport': 'Search airport...',
+    'filters.searchCountry': 'Search country...',
+    'filters.searchCity': 'Search city...',
+    'filters.airport': 'Airport',
+    'filters.country': 'Country',
+    'filters.city': 'City',
+    'filters.all': 'All',
+    'filters.topCount': 'Top/Bottom Count',
+    'filters.noResults': 'No results found',
     
     // Airline Table
     'airline.name': 'Airline',
@@ -65,7 +76,7 @@ const translations = {
     'airline.delays': 'Delays',
     'airline.cancellations': 'Cancellations',
     'airline.onTime': 'On Time',
-    'airline.avgDelay': 'Avg Delay',
+    'airline.avgDelay': 'Avg Delay (All)',
     'airline.minutes': 'min',
     'airline.flights': 'Flights',
     'airline.total': 'Total Airlines',
@@ -73,6 +84,8 @@ const translations = {
     'airline.avgOnTime': 'Avg On-Time Rate',
     'airline.top5': 'Top 5 Airlines',
     'airline.bottom5': 'Bottom 5 Airlines',
+    'airline.topN': 'Top {count} Airlines',
+    'airline.bottomN': 'Bottom {count} Airlines',
     'airline.destination': 'Destination',
     'airline.destinationsFor': 'Destinations for',
     
@@ -158,6 +171,13 @@ const translations = {
     'filters.airline': 'חברת תעופה',
     'filters.selectAirline': 'בחר חברת תעופה',
     'filters.allAirlines': 'כל חברות התעופה',
+    'filters.searchAirline': 'חפש חברת תעופה...',
+    'filters.searchDestination': 'חפש יעד...',
+    'filters.searchAirport': 'חפש שדה תעופה...',
+    'filters.airport': 'שדה תעופה',
+    'filters.all': 'הכל',
+    'filters.topCount': 'כמות מובילים/נמוכים',
+    'filters.noResults': 'לא נמצאו תוצאות',
     
     // Airline Table
     'airline.name': 'חברת תעופה',
@@ -166,7 +186,7 @@ const translations = {
     'airline.delays': 'עיכובים',
     'airline.cancellations': 'ביטולים',
     'airline.onTime': 'בזמן',
-    'airline.avgDelay': 'עיכוב ממוצע',
+    'airline.avgDelay': 'עיכוב ממוצע (כל הטיסות)',
     'airline.minutes': 'דקות',
     'airline.flights': '# טיסות',
     'airline.total': 'סה"כ חברות תעופה',
@@ -174,6 +194,8 @@ const translations = {
     'airline.avgOnTime': 'אחוז בזמן ממוצע',
     'airline.top5': '5 החברות הטובות',
     'airline.bottom5': '5 החברות הגרועות',
+    'airline.topN': 'חברות התעופה המובילות {count}',
+    'airline.bottomN': 'חברות התעופה בתחתית {count}',
     'airline.destination': 'יעד',
     'airline.destinationsFor': 'יעדים עבור',
     
@@ -256,4 +278,3 @@ export const useLanguage = () => {
   }
   return context;
 };
-

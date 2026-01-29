@@ -77,6 +77,64 @@ class AirlineAggregationService:
             # Step 2: Get the date range of the data
             date_range = self._get_date_range(base_query)
             
+            # Step 2.5: Get total flight count from base query (before filtering by airline)
+            # This ensures the total matches SELECT COUNT(*) FROM flights (with same filters applied)
+            # Create a completely fresh query to avoid any state issues
+            count_query = self.db.query(Flight)
+            
+            # Apply the same filters as the base query
+            if filters:
+                if filters.date_from:
+                    count_query = count_query.filter(Flight.scheduled_time >= filters.date_from)
+                if filters.date_to:
+                    count_query = count_query.filter(Flight.scheduled_time <= filters.date_to)
+                if filters.destination:
+                    count_query = count_query.filter(
+                        or_(
+                            Flight.location_en.ilike(f"%{filters.destination}%"),
+                            Flight.location_he.ilike(f"%{filters.destination}%"),
+                            Flight.location_city_en.ilike(f"%{filters.destination}%")
+                        )
+                    )
+                if filters.country:
+                    count_query = count_query.filter(
+                        or_(
+                            Flight.country_en.ilike(f"%{filters.country}%"),
+                            Flight.country_he.ilike(f"%{filters.country}%")
+                        )
+                    )
+                if filters.airline_codes:
+                    count_query = count_query.filter(Flight.airline_code.in_(filters.airline_codes))
+            
+            # Count ALL flights (including those with NULL airline_code/airline_name)
+            total_flights_base = count_query.count()
+            
+            # Log the actual SQL query for debugging
+            try:
+                compiled_query = str(count_query.statement)
+            except Exception as e:
+                compiled_query = f"Could not compile: {str(e)}"
+            
+            # Log for debugging - this will show exactly what SQL is being executed
+            filter_dict = filters.dict() if filters else {}
+            self.logger.info(
+                "Total flights count calculated",
+                total_flights=total_flights_base,
+                has_filters=filters is not None,
+                filters_applied=filter_dict,
+                sql_query=compiled_query
+            )
+            
+            # Also print to console for immediate visibility
+            print(f"\n{'='*80}")
+            print(f"🔍 FLIGHT COUNT DEBUG INFO:")
+            print(f"   Total flights counted: {total_flights_base:,}")
+            print(f"   Expected (from DB): 84,594")
+            print(f"   Difference: {84594 - total_flights_base:,}")
+            print(f"   Filters applied: {filter_dict}")
+            print(f"   SQL Query: {compiled_query}")
+            print(f"{'='*80}\n")
+            
             # Step 3: Calculate airline-level aggregations
             airline_data = self._calculate_airline_aggregations(base_query)
             
@@ -91,7 +149,9 @@ class AirlineAggregationService:
             filtered_kpis = self._apply_final_filters(airline_kpis, filters)
             
             # Step 6: Calculate total statistics
-            total_flights = sum(kpi.total_flights for kpi in filtered_kpis)
+            # Use the base query count to ensure accuracy (matches SELECT COUNT(*) FROM flights)
+            # Sum of airline totals might be less due to NULL airline info or filters
+            total_flights = total_flights_base
             
             calculation_time = (time.time() - start_time) * 1000  # Convert to milliseconds
             
@@ -168,7 +228,8 @@ class AirlineAggregationService:
         Returns:
             SQLAlchemy query object with filters applied
         """
-        # Start with the base Flight model
+        # Start with a fresh base Flight model query
+        # This ensures we're not affected by any previous query state
         query = self.db.query(Flight)
         
         if not filters:
@@ -238,6 +299,10 @@ class AirlineAggregationService:
         Returns:
             List of dictionaries containing airline aggregation data
         """
+        # Note: We don't filter out NULL airline_code/airline_name here
+        # because we want to count ALL flights in the total_flights calculation
+        # NULL values will be grouped together in SQL GROUP BY
+        
         # Define the aggregation query
         # This is where the magic happens - we group by airline and calculate metrics
         aggregation_query = query.with_entities(
@@ -245,31 +310,39 @@ class AirlineAggregationService:
             Flight.airline_code,
             Flight.airline_name,
             
-            # Count total flights
-            func.count(Flight.flight_id).label('total_flights'),
-            
-            # Count on-time flights (delay <= 0 or null)
+            # Count total departures only
             func.count(
                 case(
-                    (or_(Flight.delay_minutes <= 0, Flight.delay_minutes.is_(None)), 1),
+                    (Flight.direction == 'D', 1),
+                    else_=None
+                )
+            ).label('total_flights'),
+            
+            # Count on-time departures (delay <= 20 or null)
+            func.count(
+                case(
+                    (and_(Flight.direction == 'D', or_(Flight.delay_minutes <= 20, Flight.delay_minutes.is_(None))), 1),
                     else_=None
                 )
             ).label('on_time_flights'),
             
-            # Count delayed flights (delay > 0)
+            # Count delayed departures (delay > 20)
             func.count(
                 case(
-                    (Flight.delay_minutes > 0, 1),
+                    (and_(Flight.direction == 'D', Flight.delay_minutes > 20), 1),
                     else_=None
                 )
             ).label('delayed_flights'),
             
-            # Count cancelled flights
+            # Count cancelled departures
             func.count(
                 case(
-                    (or_(
+                    (and_(
+                        Flight.direction == 'D',
+                        or_(
                         Flight.status_en.ilike('%cancelled%'),
                         Flight.status_he.ilike('%בוטל%')
+                        )
                     ), 1),
                     else_=None
                 )
@@ -278,7 +351,7 @@ class AirlineAggregationService:
             # Calculate average delay for delayed flights only
             func.avg(
                 case(
-                    (Flight.delay_minutes > 0, Flight.delay_minutes),
+                    (and_(Flight.direction == 'D', Flight.delay_minutes > 0), Flight.delay_minutes),
                     else_=None
                 )
             ).label('avg_delay_delayed_only'),
@@ -286,8 +359,8 @@ class AirlineAggregationService:
             # Calculate average delay for all flights (including on-time)
             func.avg(
                 case(
-                    (Flight.delay_minutes.isnot(None), Flight.delay_minutes),
-                    else_=0
+                    (and_(Flight.direction == 'D', Flight.delay_minutes.isnot(None)), Flight.delay_minutes),
+                    else_=None
                 )
             ).label('avg_delay_all_flights'),
             

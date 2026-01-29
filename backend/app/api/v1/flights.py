@@ -217,8 +217,10 @@ async def get_flight_stats(
         
         # Get basic stats
         total_flights = query.count()
-        on_time_flights = query.filter(Flight.delay_minutes <= 0).count()
-        delayed_flights = query.filter(Flight.delay_minutes > 0).count()
+        on_time_flights = query.filter(
+            or_(Flight.delay_minutes <= 20, Flight.delay_minutes.is_(None))
+        ).count()
+        delayed_flights = query.filter(Flight.delay_minutes > 20).count()
         
         # Calculate average delay
         avg_delay_result = query.filter(Flight.delay_minutes.isnot(None)).with_entities(
