@@ -9,13 +9,22 @@ import { DynamicTable } from "@/components/DynamicTable";
 import { PaginatedFlightsTable } from "@/components/PaginatedFlightsTable";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useApiData } from "@/hooks/useApiData";
-import { useAirlineData } from "@/hooks/useAirlineData";
+import { useAirlineData, type AirlineBackendKPI } from "@/hooks/useAirlineData";
 import { usePaginatedFlights } from "@/hooks/usePaginatedFlights";
-import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines } from "@/lib/mockData.ts";
+import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines, type AirlineKPI } from "@/lib/mockData.ts";
 import { Plane, BarChart3, Github, Linkedin } from "lucide-react";
 import { API_ENDPOINTS } from "@/config/api";
 
 type SearchType = "airline" | "airport" | "country" | "city";
+
+type AirlineDestinationKPI = {
+  destination?: string;
+  on_time_percentage?: number;
+  avg_delay_all_flights?: number;
+  avg_delay_minutes?: number;
+  cancellation_percentage?: number;
+  total_flights?: number;
+};
 
 const Index = () => {
   const [selectedAirport, setSelectedAirport] = useState("All");
@@ -30,16 +39,19 @@ const Index = () => {
   
   // Fetch airlines to build name-to-code mapping
   const { data: airlinesData } = useApiData(API_ENDPOINTS.AIRLINES);
-  const airlineNameToCodeMap = new Map<string, string>();
-  if (airlinesData && airlinesData.length > 0) {
-    airlinesData.forEach((airline: Record<string, unknown>) => {
-      const name = airline.airline_name || airline.name;
-      const code = airline.airline_code || airline.code;
-      if (name && code) {
-        airlineNameToCodeMap.set(name, code);
-      }
-    });
-  }
+  const airlineNameToCodeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (airlinesData && airlinesData.length > 0) {
+      airlinesData.forEach((airline: Record<string, unknown>) => {
+        const name = airline.airline_name || airline.name;
+        const code = airline.airline_code || airline.code;
+        if (name && code) {
+          map.set(name as string, code as string);
+        }
+      });
+    }
+    return map;
+  }, [airlinesData]);
   
   // Helper function to build query parameters for airline stats API
   // Backend expects: destination, country, date_from, date_to, airline_codes
@@ -185,7 +197,7 @@ const Index = () => {
   } = usePaginatedFlights(FLIGHTS_API_ENDPOINT);
   
   // Convert API data to mock format for AirlineTable component
-  const convertToMockFormat = (airlines: unknown[]): unknown[] => {
+  const convertToMockFormat = (airlines: AirlineBackendKPI[]): AirlineKPI[] => {
     if (!Array.isArray(airlines) || airlines.length === 0) {
       return [];
     }
@@ -208,7 +220,7 @@ const Index = () => {
   };
 
   // Convert airline destinations data to mock format for AirlineTable component
-  const convertDestinationsToMockFormat = (destinations: unknown[]): unknown[] => {
+  const convertDestinationsToMockFormat = (destinations: AirlineDestinationKPI[]): AirlineKPI[] => {
     if (!Array.isArray(destinations) || destinations.length === 0) {
       return [];
     }
@@ -227,15 +239,18 @@ const Index = () => {
   };
   
   // Use real data for airline tables, fallback to mock data
-  const realAirlines = Array.isArray(airlineData) ? airlineData : [];
-  
+  const realAirlines = useMemo<AirlineBackendKPI[]>(
+    () => (Array.isArray(airlineData) ? airlineData : []),
+    [airlineData]
+  );
+
   const isAirlineView = effectiveAirline !== 'All' && !effectiveDestination;
   const isDestinationView = effectiveDestination && effectiveAirline !== 'All';
-  
+
   // Get single airline performance data when only airline is selected
   const singleAirlineData = useMemo(() => {
     if (isAirlineView && realAirlines.length > 0) {
-      return realAirlines.find((airline: Record<string, unknown>) =>
+      return realAirlines.find((airline) =>
         airline.airline_name === effectiveAirline ||
         airline.airline_code === airlineNameToCodeMap.get(effectiveAirline)
       );
@@ -243,22 +258,21 @@ const Index = () => {
     return null;
   }, [isAirlineView, realAirlines, effectiveAirline, airlineNameToCodeMap]);
   
-  const airlineDestinationsArray = Array.isArray(airlineDestinationsData)
-    ? airlineDestinationsData
-    : ((airlineDestinationsData as Record<string, unknown>)?.destinations || []);
+  const airlineDestinationsArray: AirlineDestinationKPI[] = Array.isArray(airlineDestinationsData)
+    ? (airlineDestinationsData as AirlineDestinationKPI[])
+    : (Array.isArray((airlineDestinationsData as Record<string, unknown>)?.destinations)
+        ? ((airlineDestinationsData as Record<string, unknown>).destinations as AirlineDestinationKPI[])
+        : []);
 
-  // If airline AND destination are selected, use destinations data
-  const displayData = isDestinationView
-    ? airlineDestinationsArray
-    : (realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(effectiveDestination || 'All'));
-  
-  // For stats panel - use airlines data
-  const statsData = realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(effectiveDestination || 'All');
+  const mockFallback = filterAirlinesByDestination(effectiveDestination || 'All');
   
   // Convert data to mock format for AirlineTable components
-  const allAirlines = isDestinationView
-    ? convertDestinationsToMockFormat(displayData)
-    : convertToMockFormat(displayData);
+  const allAirlines: AirlineKPI[] = isDestinationView
+    ? convertDestinationsToMockFormat(airlineDestinationsArray)
+    : (realAirlines.length > 0 ? convertToMockFormat(realAirlines) : mockFallback);
+  
+  // For stats panel - use mock-format data so fields are consistent
+  const statsData: AirlineKPI[] = realAirlines.length > 0 ? convertToMockFormat(realAirlines) : mockFallback;
   
   // Filter airlines to only show those with at least 20 flights
   const filteredAirlines = allAirlines.filter(airline => airline.flightCount >= 20);
@@ -316,7 +330,7 @@ const Index = () => {
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-info">
               {realAirlines.length > 0
-                ? (realAirlines.reduce((sum: number, airline: Record<string, unknown>) => sum + (airline.on_time_percentage as number), 0) / realAirlines.length).toFixed(1)
+                ? (realAirlines.reduce((sum, airline) => sum + airline.on_time_percentage, 0) / realAirlines.length).toFixed(1)
                 : (statsData.reduce((sum, airline) => sum + airline.onTimePercentage, 0) / statsData.length).toFixed(1)
               }%
             </div>

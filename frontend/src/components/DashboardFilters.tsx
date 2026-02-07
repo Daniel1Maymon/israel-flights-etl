@@ -48,12 +48,14 @@ export const DashboardFilters = ({
   // Process airports
   const allAirports = useMemo(() => {
     if (!destinationsData || destinationsData.length === 0) return [];
-    const destinations = Array.isArray(destinationsData) 
-      ? destinationsData 
-      : (destinationsData as any)?.destinations || [];
+    const destinations: unknown[] = Array.isArray(destinationsData)
+      ? destinationsData
+      : (Array.isArray((destinationsData as Record<string, unknown>)?.destinations)
+          ? ((destinationsData as Record<string, unknown>).destinations as unknown[])
+          : []);
     return destinations
-      .map((dest: any) => dest.destination || dest)
-      .filter((dest: string) => dest && dest.trim() !== '')
+      .map((dest: unknown) => (dest as Record<string, unknown>).destination || dest)
+      .filter((dest: unknown): dest is string => typeof dest === 'string' && dest.trim() !== '')
       .sort((a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase()));
   }, [destinationsData]);
 
@@ -61,15 +63,18 @@ export const DashboardFilters = ({
   const allAirlines = useMemo(() => {
     if (!airlinesData || airlinesData.length === 0) return [];
     return airlinesData
-      .map((airline: any) => ({
-        code: airline.airline_code || airline.code || '',
-        name: airline.airline_name || airline.name || ''
-      }))
+      .map((airline: unknown) => {
+        const airlineObj = airline as Record<string, unknown>;
+        return {
+          code: (airlineObj.airline_code || airlineObj.code || '') as string,
+          name: (airlineObj.airline_name || airlineObj.name || '') as string
+        };
+      })
       .filter((airline: { code: string; name: string }) => airline.name && airline.name.trim() !== '')
-      .filter((airline: { code: string; name: string }, index: number, self: { code: string; name: string }[]) => 
+      .filter((airline: { code: string; name: string }, index: number, self: { code: string; name: string }[]) =>
         index === self.findIndex((a: { code: string; name: string }) => a.name.toLowerCase() === airline.name.toLowerCase())
       )
-      .sort((a: { code: string; name: string }, b: { code: string; name: string }) => 
+      .sort((a: { code: string; name: string }, b: { code: string; name: string }) =>
         a.name.toLowerCase().localeCompare(b.name.toLowerCase())
       )
       .map((a: { code: string; name: string }) => a.name);

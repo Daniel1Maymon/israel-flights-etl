@@ -40,15 +40,18 @@ export const UnifiedSearch = ({ selectedValue, onValueChange, label, allowedType
   const allAirlines = useMemo(() => {
     if (!airlinesData || airlinesData.length === 0) return [];
     return airlinesData
-      .map((airline: any) => ({
-        code: airline.airline_code || airline.code || '',
-        name: airline.airline_name || airline.name || ''
-      }))
+      .map((airline: unknown) => {
+        const airlineObj = airline as Record<string, unknown>;
+        return {
+          code: (airlineObj.airline_code || airlineObj.code || '') as string,
+          name: (airlineObj.airline_name || airlineObj.name || '') as string
+        };
+      })
       .filter((airline: { code: string; name: string }) => airline.name && airline.name.trim() !== '')
-      .filter((airline: { code: string; name: string }, index: number, self: { code: string; name: string }[]) => 
+      .filter((airline: { code: string; name: string }, index: number, self: { code: string; name: string }[]) =>
         index === self.findIndex((a: { code: string; name: string }) => a.name.toLowerCase() === airline.name.toLowerCase())
       )
-      .sort((a: { code: string; name: string }, b: { code: string; name: string }) => 
+      .sort((a: { code: string; name: string }, b: { code: string; name: string }) =>
         a.name.toLowerCase().localeCompare(b.name.toLowerCase())
       )
       .map((a: { code: string; name: string }) => a.name);
@@ -58,42 +61,47 @@ export const UnifiedSearch = ({ selectedValue, onValueChange, label, allowedType
   const allAirports = useMemo(() => {
     if (!destinationsData || destinationsData.length === 0) return [];
     // Handle both array and object responses
-    const destinations = Array.isArray(destinationsData) 
-      ? destinationsData 
-      : (destinationsData as any)?.destinations || [];
+    const destinations: unknown[] = Array.isArray(destinationsData)
+      ? destinationsData
+      : (Array.isArray((destinationsData as Record<string, unknown>)?.destinations)
+          ? ((destinationsData as Record<string, unknown>).destinations as unknown[])
+          : []);
     return destinations
-      .map((dest: any) => dest.destination || dest)
-      .filter((dest: string) => dest && dest.trim() !== '')
+      .map((dest: unknown) => (dest as Record<string, unknown>).destination || dest)
+      .filter((dest: unknown): dest is string => typeof dest === 'string' && dest.trim() !== '')
       .sort((a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase()));
   }, [destinationsData]);
   
   // Fetch flights to extract countries and cities
   // Use pagination to get unique values efficiently (max size is 200 per backend)
   const { data: flightsResponse } = useApiData(`${API_ENDPOINTS.FLIGHTS}?page=1&size=200`);
-  
+
   // Process countries and cities from flights
   const { countries, cities } = useMemo(() => {
     // Handle both array and object responses
-    const flights = Array.isArray(flightsResponse)
+    const flights: unknown[] = Array.isArray(flightsResponse)
       ? flightsResponse
-      : (flightsResponse as any)?.data || [];
-    
+      : (Array.isArray((flightsResponse as Record<string, unknown>)?.data)
+          ? ((flightsResponse as Record<string, unknown>).data as unknown[])
+          : []);
+
     if (!flights || flights.length === 0) {
       return { countries: [], cities: [] };
     }
-    
+
     const countrySet = new Set<string>();
     const citySet = new Set<string>();
-    
-    flights.forEach((flight: any) => {
-      if (flight.country_en && flight.country_en.trim()) {
-        countrySet.add(flight.country_en.trim());
+
+    flights.forEach((flight: unknown) => {
+      const flightObj = flight as Record<string, unknown>;
+      if (flightObj.country_en && typeof flightObj.country_en === 'string' && flightObj.country_en.trim()) {
+        countrySet.add(flightObj.country_en.trim());
       }
-      if (flight.location_city_en && flight.location_city_en.trim()) {
-        citySet.add(flight.location_city_en.trim());
+      if (flightObj.location_city_en && typeof flightObj.location_city_en === 'string' && flightObj.location_city_en.trim()) {
+        citySet.add(flightObj.location_city_en.trim());
       }
     });
-    
+
     return {
       countries: Array.from(countrySet).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
       cities: Array.from(citySet).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
@@ -121,9 +129,10 @@ export const UnifiedSearch = ({ selectedValue, onValueChange, label, allowedType
     const options = getSearchOptions();
     if (!searchQuery.trim()) return options;
     const searchLower = searchQuery.toLowerCase();
-    return options.filter((option: string) => 
+    return options.filter((option: string) =>
       option.toLowerCase().includes(searchLower)
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchType, searchQuery, allAirlines, allAirports, countries, cities]);
   
   // Close dropdown when clicking outside
@@ -143,6 +152,7 @@ export const UnifiedSearch = ({ selectedValue, onValueChange, label, allowedType
     setSearchType(getDefaultType());
     setSearchQuery("");
     setIsDropdownOpen(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSignal, allowedTypes, defaultType]);
   
   const handleSelect = (value: string) => {

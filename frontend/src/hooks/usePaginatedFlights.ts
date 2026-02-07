@@ -117,6 +117,7 @@ export const usePaginatedFlights = (baseUrl: string): UsePaginatedFlightsResult 
     if (baseUrl) {
       fetchData();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseUrl]);
 
   return {

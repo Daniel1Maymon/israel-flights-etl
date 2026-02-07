@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { API_ENDPOINTS } from '@/config/api';
 
 // Define the interface for airline KPI data from the backend
-interface AirlineKPI {
+export interface AirlineBackendKPI {
   airline_code: string;
   airline_name: string;
   on_time_percentage: number;
@@ -27,7 +27,7 @@ interface AirlineKPI {
 
 // Define the response structure from the API
 interface AirlineStatsResponse {
-  airlines: AirlineKPI[];
+  airlines: AirlineBackendKPI[];
   total_airlines: number;
   total_flights: number;
   date_range: {
@@ -40,7 +40,7 @@ interface AirlineStatsResponse {
 
 // Define the hook's return type
 interface UseAirlineDataResult {
-  data: AirlineKPI[];
+  data: AirlineBackendKPI[];
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -58,7 +58,7 @@ interface UseAirlineDataResult {
  */
 export const useAirlineData = (endpoint: string): UseAirlineDataResult => {
   // State management
-  const [data, setData] = useState<AirlineKPI[]>([]);
+  const [data, setData] = useState<AirlineBackendKPI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalAirlines, setTotalAirlines] = useState(0);
@@ -152,6 +152,7 @@ export const useAirlineData = (endpoint: string): UseAirlineDataResult => {
   // Effect to fetch data when the endpoint changes
   useEffect(() => {
     fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
 
   // Return the hook's interface
@@ -174,8 +175,8 @@ export const useAirlineData = (endpoint: string): UseAirlineDataResult => {
  * which is useful for creating leaderboards.
  */
 export const useTopBottomAirlines = (endpoint: string) => {
-  const [topAirlines, setTopAirlines] = useState<AirlineKPI[]>([]);
-  const [bottomAirlines, setBottomAirlines] = useState<AirlineKPI[]>([]);
+  const [topAirlines, setTopAirlines] = useState<AirlineBackendKPI[]>([]);
+  const [bottomAirlines, setBottomAirlines] = useState<AirlineBackendKPI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

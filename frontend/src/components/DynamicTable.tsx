@@ -6,7 +6,7 @@ import { Database, Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface DynamicTableProps {
-  data: any[];
+  data: Record<string, unknown>[];
   loading: boolean;
   error: string | null;
   title: string;
@@ -22,13 +22,13 @@ export const DynamicTable = ({ data, loading, error, title }: DynamicTableProps)
   };
 
   // Format cell value for display
-  const formatCellValue = (value: any, column: string) => {
+  const formatCellValue = (value: unknown, column: string): string => {
     if (value === null || value === undefined) return '-';
     
     // Handle timestamps
     if (column.includes('time') || column.includes('timestamp')) {
       try {
-        return new Date(value).toLocaleString();
+        return new Date(value as string | number | Date).toLocaleString();
       } catch {
         return value.toString();
       }
@@ -76,7 +76,7 @@ export const DynamicTable = ({ data, loading, error, title }: DynamicTableProps)
   };
 
   // Check if a column should be displayed as a badge
-  const shouldShowAsBadge = (column: string, value: any) => {
+  const shouldShowAsBadge = (column: string, value: unknown) => {
     const statusColumns = ['status', 'status_en', 'status_he', 'direction'];
     return statusColumns.some(statusCol => column.toLowerCase().includes(statusCol)) || 
            (typeof value === 'string' && value.length < 20);
@@ -188,7 +188,7 @@ export const DynamicTable = ({ data, loading, error, title }: DynamicTableProps)
                   {columns.map((column) => {
                     const value = row[column];
                     const formattedValue = formatCellValue(value, column);
-                    const directionIcon = getDirectionIcon(value, column);
+                    const directionIcon = typeof value === 'string' ? getDirectionIcon(value, column) : null;
                     const statusColor = getStatusColor(formattedValue, column);
                     const showAsBadge = shouldShowAsBadge(column, value);
 

@@ -105,14 +105,14 @@ export const AirlineTable = ({ data, isTop, isAirlineView = false, airlineName, 
     
     if (sortDirection === 'asc') {
       if (typeof aValue === 'string') {
-        return aValue.localeCompare(bValue);
+        return String(aValue).localeCompare(String(bValue));
       }
-      return aValue - bValue;
+      return Number(aValue) - Number(bValue);
     } else {
       if (typeof aValue === 'string') {
-        return bValue.localeCompare(aValue);
+        return String(bValue).localeCompare(String(aValue));
       }
-      return bValue - aValue;
+      return Number(bValue) - Number(aValue);
     }
   });
 
