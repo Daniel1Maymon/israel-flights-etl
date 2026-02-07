@@ -1017,4 +1017,10 @@ The system is production-ready with proper error handling, logging, and monitori
 
 **Good luck with your presentation!** 🚀
 
+---
+
+## Credits
+
+- GitHub: Daniel1Maymon (https://github.com/Daniel1Maymon)
+- Data source: data.gov.il
 

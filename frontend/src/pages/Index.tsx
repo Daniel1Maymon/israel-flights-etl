@@ -12,7 +12,7 @@ import { useApiData } from "@/hooks/useApiData";
 import { useAirlineData } from "@/hooks/useAirlineData";
 import { usePaginatedFlights } from "@/hooks/usePaginatedFlights";
 import { filterAirlinesByDestination, getTopAirlines, getBottomAirlines } from "@/lib/mockData.ts";
-import { Plane, BarChart3 } from "lucide-react";
+import { Plane, BarChart3, Github, Linkedin } from "lucide-react";
 import { API_ENDPOINTS } from "@/config/api";
 
 type SearchType = "airline" | "airport" | "country" | "city";
@@ -32,7 +32,7 @@ const Index = () => {
   const { data: airlinesData } = useApiData(API_ENDPOINTS.AIRLINES);
   const airlineNameToCodeMap = new Map<string, string>();
   if (airlinesData && airlinesData.length > 0) {
-    airlinesData.forEach((airline: any) => {
+    airlinesData.forEach((airline: Record<string, unknown>) => {
       const name = airline.airline_name || airline.name;
       const code = airline.airline_code || airline.code;
       if (name && code) {
@@ -82,7 +82,7 @@ const Index = () => {
     if (selectedDateRange !== 'all-time') {
       const now = new Date();
       let dateFrom: Date;
-      let dateTo: Date = now;
+      const dateTo: Date = now;
       
       switch (selectedDateRange) {
         case 'last-7-days':
@@ -143,8 +143,14 @@ const Index = () => {
     return airlineNameToCodeMap.get(airlineName) || airlineName;
   };
   
+  const destinationsQuery = (() => {
+    const params = new URLSearchParams(buildQueryParams());
+    params.set('lang', isRTL ? 'he' : 'en');
+    return params.toString();
+  })();
+
   const AIRLINE_DESTINATIONS_ENDPOINT = effectiveAirline !== 'All' 
-    ? `${API_ENDPOINTS.AIRLINE_DESTINATIONS(getAirlineCode(effectiveAirline))}${buildQueryParams() ? `?${buildQueryParams()}` : ''}`
+    ? `${API_ENDPOINTS.AIRLINE_DESTINATIONS(getAirlineCode(effectiveAirline))}${destinationsQuery ? `?${destinationsQuery}` : ''}`
     : '';
   
   // Fetch flight data from API when in database mode
@@ -179,7 +185,7 @@ const Index = () => {
   } = usePaginatedFlights(FLIGHTS_API_ENDPOINT);
   
   // Convert API data to mock format for AirlineTable component
-  const convertToMockFormat = (airlines: any[]): any[] => {
+  const convertToMockFormat = (airlines: unknown[]): unknown[] => {
     if (!Array.isArray(airlines) || airlines.length === 0) {
       return [];
     }
@@ -202,7 +208,7 @@ const Index = () => {
   };
 
   // Convert airline destinations data to mock format for AirlineTable component
-  const convertDestinationsToMockFormat = (destinations: any[]): any[] => {
+  const convertDestinationsToMockFormat = (destinations: unknown[]): unknown[] => {
     if (!Array.isArray(destinations) || destinations.length === 0) {
       return [];
     }
@@ -229,17 +235,21 @@ const Index = () => {
   // Get single airline performance data when only airline is selected
   const singleAirlineData = useMemo(() => {
     if (isAirlineView && realAirlines.length > 0) {
-      return realAirlines.find((airline: any) => 
-        airline.airline_name === effectiveAirline || 
+      return realAirlines.find((airline: Record<string, unknown>) =>
+        airline.airline_name === effectiveAirline ||
         airline.airline_code === airlineNameToCodeMap.get(effectiveAirline)
       );
     }
     return null;
   }, [isAirlineView, realAirlines, effectiveAirline, airlineNameToCodeMap]);
   
+  const airlineDestinationsArray = Array.isArray(airlineDestinationsData)
+    ? airlineDestinationsData
+    : ((airlineDestinationsData as Record<string, unknown>)?.destinations || []);
+
   // If airline AND destination are selected, use destinations data
   const displayData = isDestinationView
-    ? ((airlineDestinationsData as any)?.destinations || [])
+    ? airlineDestinationsArray
     : (realAirlines.length > 0 ? realAirlines : filterAirlinesByDestination(effectiveDestination || 'All'));
   
   // For stats panel - use airlines data
@@ -253,9 +263,7 @@ const Index = () => {
   // Filter airlines to only show those with at least 20 flights
   const filteredAirlines = allAirlines.filter(airline => airline.flightCount >= 20);
 
-  const airlineDestinations = convertDestinationsToMockFormat(
-    ((airlineDestinationsData as any)?.destinations || [])
-  );
+  const airlineDestinations = convertDestinationsToMockFormat(airlineDestinationsArray);
   
   // Debug converted data
 
@@ -307,8 +315,8 @@ const Index = () => {
           </div>
           <div className="bg-card border border-border rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-info">
-              {realAirlines.length > 0 
-                ? (realAirlines.reduce((sum: number, airline: any) => sum + airline.on_time_percentage, 0) / realAirlines.length).toFixed(1)
+              {realAirlines.length > 0
+                ? (realAirlines.reduce((sum: number, airline: Record<string, unknown>) => sum + (airline.on_time_percentage as number), 0) / realAirlines.length).toFixed(1)
                 : (statsData.reduce((sum, airline) => sum + airline.onTimePercentage, 0) / statsData.length).toFixed(1)
               }%
             </div>
@@ -393,6 +401,37 @@ const Index = () => {
             </div>
           )
         )}
+
+        {/* Credits */}
+        <div className="mt-10 text-center text-xs text-muted-foreground">
+          <div className="flex flex-col items-center gap-1" dir="ltr">
+            <span className="inline-flex items-center gap-1">
+              <Github className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>GitHub:</span>{' '}
+              <a
+                href="https://github.com/Daniel1Maymon/israel-flights-etl"
+                className="underline underline-offset-2 hover:text-foreground"
+                target="_blank"
+                rel="noreferrer"
+              >
+                israel-flights-etl
+              </a>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Linkedin className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>LinkedIn:</span>{' '}
+              <a
+                href="https://www.linkedin.com/in/daniel-maymon/"
+                className="underline underline-offset-2 hover:text-foreground"
+                target="_blank"
+                rel="noreferrer"
+              >
+                daniel-maymon
+              </a>
+            </span>
+            <span>Data source: data.gov.il</span>
+          </div>
+        </div>
       </div>
     </div>
   );

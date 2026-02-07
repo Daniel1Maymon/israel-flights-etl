@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Script to manually download flight data from S3 and load it into Postgres without Airflow.
+# Steps:
+# 1) Parse CLI args (S3 key, prefix, dry-run, etc.).
+# 2) Optionally show processed-file status.
+# 3) Download raw data files from S3.
+# 4) Transform and load data into Postgres.
+# 5) Report results and close connections.
 """
 Manual script to download flight data from S3 and load it into the database.
 
@@ -163,14 +170,21 @@ def process_data(args):
         # MODE 3: Process a specific file that you specify
         # This downloads one specific file from S3 and processes it
         logger.info(f"Using download_and_load_from_s3() with key: {args.s3_key}")
-        return download_and_load_from_s3(s3_key=args.s3_key, use_gzipped=not args.no_gzip)
+        return download_and_load_from_s3(
+            s3_key=args.s3_key,
+            use_gzipped=not args.no_gzip,
+            force=args.force
+        )
 
 
 def display_results(result, args):
     """Display the processing results."""
     # STEP 7A: Show success header
     logger.info("="*60)
-    logger.info("DOWNLOAD AND LOAD COMPLETED SUCCESSFULLY")
+    if result.get("status") == "skipped":
+        logger.info("DOWNLOAD AND LOAD SKIPPED (ALREADY PROCESSED)")
+    else:
+        logger.info("DOWNLOAD AND LOAD COMPLETED SUCCESSFULLY")
     logger.info("="*60)
     logger.info(f"Status: {result['status']}")
     
@@ -221,6 +235,7 @@ def main():
     # STEP 1: Parse command line arguments
     parser = setup_argument_parser()
     args = parser.parse_args()
+    logger.info(f"Arguments: {args}")
     
     # STEP 2: Configure logging level based on user input
     if args.verbose:

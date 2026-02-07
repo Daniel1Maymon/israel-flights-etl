@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Script to count S3 objects by prefix and file extension.
+# Steps:
+# 1) Parse CLI args for bucket and prefixes.
+# 2) List objects for each prefix via S3 paginator.
+# 3) Aggregate counts and total size by file type.
+# 4) Print a human-readable or JSON summary.
 """
 Count files in S3 bucket by prefix.
 

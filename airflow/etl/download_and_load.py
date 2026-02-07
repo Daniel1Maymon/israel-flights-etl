@@ -530,7 +530,8 @@ def download_and_load_from_s3(
     bucket_name: str = S3_BUCKET_NAME,
     s3_key: str = None,
     use_gzipped: bool = True,
-    pg_conn_id: str = 'postgres_flights'
+    pg_conn_id: str = 'postgres_flights',
+    force: bool = False
 ) -> Dict[str, Any]:
     """
     Main function to download flight data from S3 and load it into the database.
@@ -552,6 +553,8 @@ def download_and_load_from_s3(
             s3_key = f"{S3_RAW_PATH}/latest.json.gz"
         
         logging.info(f"Starting download and load process for s3://{bucket_name}/{s3_key}")
+        file_name = s3_key.split('/')[-1]
+        logging.info(f"File name: {file_name}")
         
         # Step 1: Download data from S3
         if use_gzipped and s3_key.endswith('.gz'):
@@ -580,9 +583,27 @@ def download_and_load_from_s3(
         try:
         # Step 5: Create table if not exists
             create_flights_table_if_not_exists(conn)
+            create_processed_files_table_if_not_exists(conn)
+
+            # Step 5B: Skip if already processed (unless force=True)
+            if not force and is_file_processed(conn, file_name):
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                skipped_result = {
+                    "status": "skipped",
+                    "total_records": 0,
+                    "rows_loaded": 0,
+                    "rows_skipped": 0,
+                    "processing_time_seconds": processing_time,
+                    "s3_source": f"s3://{bucket_name}/{s3_key}",
+                    "timestamp": end_time.isoformat()
+                }
+                logging.info(f"Skipping {s3_key} - already processed")
+                return skipped_result
         
         # Step 6: Load data into database
             rows_loaded = upsert_flight_data(df, conn)
+            mark_file_processed(conn, file_name, s3_key, 'success')
         finally:
             conn.close()
         
@@ -604,6 +625,17 @@ def download_and_load_from_s3(
         return result
         
     except Exception as e:
+        try:
+            conn = get_postgres_connection()
+            try:
+                file_name = s3_key.split('/')[-1] if s3_key else "unknown"
+                create_processed_files_table_if_not_exists(conn)
+                mark_file_processed(conn, file_name, s3_key or "unknown", 'failed')
+            finally:
+                conn.close()
+        except Exception:
+            logging.exception("Failed to mark file as failed")
+
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds()
         
@@ -773,6 +805,7 @@ def download_and_load_all_files(
             # Check if file already processed (unless force=True)
             conn = get_postgres_connection()
             try:
+                logging.info(f"Checking processed_files for file_name={file_name} (s3_key={s3_key})")
                 if not force and is_file_processed(conn, file_name):
                     logging.info(f"Skipping {s3_key} - already processed")
                     files_skipped += 1

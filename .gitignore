@@ -136,6 +136,10 @@ celerybeat.pid
 
 # Environments
 .env
+.env.prod
+.env.prod.*
+.env.local
+!.env.prod.example
 .envrc
 .venv
 env/
@@ -240,6 +244,7 @@ airflow/create_connections.py
 *_fix.py
 debug_*.py
 test_*.py
+!etl/tests/test_*.py
 verify_*.py
 compare_*.py
 investigate_*.py

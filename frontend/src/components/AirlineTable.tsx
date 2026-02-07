@@ -75,8 +75,8 @@ export const AirlineTable = ({ data, isTop, isAirlineView = false, airlineName, 
 
   // Sort data based on current sort field and direction
   const sortedData = [...data].sort((a, b) => {
-    let aValue: any;
-    let bValue: any;
+    let aValue: string | number;
+    let bValue: string | number;
     
     switch (sortField) {
       case 'airline':

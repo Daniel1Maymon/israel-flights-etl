@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Script to process gzipped raw flight files from S3 through the ETL pipeline.
+# Steps:
+# 1) List gzipped raw files in S3.
+# 2) Download and decompress each file.
+# 3) Upload JSON back to S3 and validate.
+# 4) Transform JSON to CSV and upload processed output.
+# 5) Load into Postgres and log progress.
 """
 Process gzipped JSON files from S3 bucket and run them through the ETL pipeline.
 
@@ -468,4 +475,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

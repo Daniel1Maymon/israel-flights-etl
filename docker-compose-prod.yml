@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+  postgres_flights:
+    image: postgres:16.3
+    container_name: postgres_flights
+    environment:
+      POSTGRES_USER: ${POSTGRES_FLIGHTS_USER:-daniel}
+      POSTGRES_PASSWORD: ${POSTGRES_FLIGHTS_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_FLIGHTS_DB:-flights_db}
+    # No ports: keep DB private (internal Docker network only)
+    volumes:
+      - ${POSTGRES_FLIGHTS_DATA_DIR:-/opt/israel-flights/data/postgres_flights}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_FLIGHTS_USER:-daniel} -d ${POSTGRES_FLIGHTS_DB:-flights_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: [israel-flights-network]
+
+  # Lightweight ETL runner (replaces Airflow)
+  etl:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile
+    container_name: etl_runner
+    depends_on:
+      postgres_flights:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      POSTGRES_FLIGHTS_HOST: postgres_flights
+      POSTGRES_FLIGHTS_PORT: 5432
+      POSTGRES_FLIGHTS_DB: ${POSTGRES_FLIGHTS_DB:-flights_db}
+      POSTGRES_FLIGHTS_USER: ${POSTGRES_FLIGHTS_USER:-daniel}
+      POSTGRES_FLIGHTS_PASSWORD: ${POSTGRES_FLIGHTS_PASSWORD:-change_me}
+      SCHEDULE_INTERVAL_MINUTES: ${SCHEDULE_INTERVAL_MINUTES:-15}
+    restart: unless-stopped
+    networks: [israel-flights-network]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_api
+    depends_on:
+      postgres_flights:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_FLIGHTS_USER:-daniel}:${POSTGRES_FLIGHTS_PASSWORD:-change_me}@postgres_flights:5432/${POSTGRES_FLIGHTS_DB:-flights_db}
+      DB_HOST: postgres_flights
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_FLIGHTS_DB:-flights_db}
+      DB_USER: ${POSTGRES_FLIGHTS_USER:-daniel}
+      DB_PASSWORD: ${POSTGRES_FLIGHTS_PASSWORD:-change_me}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://your-vercel-domain.vercel.app}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    restart: unless-stopped
+    networks: [israel-flights-network]
+
+
+networks:
+  israel-flights-network:
+    driver: bridge

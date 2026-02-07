@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Script to detect duplicate flights and verify flight_id consistency in Postgres.
+# Steps:
+# 1) Check for duplicate flight_id values.
+# 2) Check for duplicate natural-key combinations.
+# 3) Verify flight_id hashes match natural keys.
+# 4) Optionally remove duplicates (keeping the most recent by scrape_timestamp).
 """
 Check for duplicate flights in the database and optionally remove them.
 

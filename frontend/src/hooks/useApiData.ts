@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 
 interface UseApiDataResult {
-  data: any[];
+  data: unknown[];
   loading: boolean;
   error: string | null;
   refetch: () => void;
 }
 
 export const useApiData = (endpoint: string): UseApiDataResult => {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +55,7 @@ export const useApiData = (endpoint: string): UseApiDataResult => {
     if (endpoint) {
       fetchData();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
 
   return {

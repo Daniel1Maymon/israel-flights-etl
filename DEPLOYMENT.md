@@ -10,7 +10,7 @@ This guide will help you deploy the Israel Flights ETL project on an EC2 instanc
    - At least 20GB storage
 
 2. **Security Group Configuration**
-   - Open port 80 (HTTP) for frontend
+   - Open port 80 (HTTP) for frontend only if hosting frontend on this server
    - Open port 8000 (Backend API) - optional if using reverse proxy
    - Open port 8082 (Airflow Web UI) - optional
    - Open port 22 (SSH) for access
@@ -55,68 +55,46 @@ git clone <your-repo-url> israel-flights-etl
 cd israel-flights-etl
 ```
 
-### 2.2 Create environment file
+### 2.2 Create production environment file
 ```bash
-cp env.example .env
-nano .env  # or use your preferred editor
+cp .env.prod.example .env.prod
+nano .env.prod  # or use your preferred editor
 ```
 
-### 2.3 Update .env file with your values
+### 2.3 Update .env.prod with your values
 
 **Important configurations for EC2:**
 
-1. **Update VITE_API_URL** to point to your EC2 instance:
+1. **Update CORS_ORIGINS** to allow your frontend domain:
    ```bash
-   # If accessing via IP
-   VITE_API_URL=http://YOUR_EC2_PUBLIC_IP:8000
-   
-   # If using a domain
-   VITE_API_URL=http://api.yourdomain.com
+   # Add your frontend domain
+   CORS_ORIGINS=https://israel-flights-pxuqv4mj1-daniel1maymons-projects.vercel.app
    ```
 
-2. **Update CORS_ORIGINS** to allow your frontend domain:
-   ```bash
-   # Add your EC2 IP or domain
-   CORS_ORIGINS=http://YOUR_EC2_PUBLIC_IP,http://yourdomain.com,http://localhost,http://127.0.0.1
-   ```
-
-3. **Update database passwords** (use strong passwords in production):
+2. **Update database passwords** (use strong passwords in production):
    ```bash
    POSTGRES_AIRFLOW_PASSWORD=your_strong_password_here
    POSTGRES_FLIGHTS_PASSWORD=your_strong_password_here
    ```
 
-4. **Update AWS credentials** (if using S3):
+3. **Update AWS credentials** (if using S3):
    ```bash
    AWS_ACCESS_KEY_ID=your_actual_key
    AWS_SECRET_ACCESS_KEY=your_actual_secret
    AWS_DEFAULT_REGION=us-east-1
    ```
 
-5. **Update Airflow credentials**:
+4. **Update Airflow credentials**:
    ```bash
    AIRFLOW_USERNAME=admin
    AIRFLOW_PASSWORD=your_strong_password_here
    ```
 
-### 2.4 Quick Deploy (Alternative)
-
-You can use the provided deployment script:
-```bash
-./deploy.sh
-```
-
-This script will:
-- Check for .env file and create from template if needed
-- Verify Docker installation
-- Build and start all services
-- Show service status
-
 ## Step 3: Deploy with Docker Compose
 
 ### 3.1 Build and start all services
 ```bash
-docker-compose up -d --build
+docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --build
 ```
 
 This will:
@@ -125,22 +103,20 @@ This will:
 - Initialize Airflow
 - Start Airflow webserver and scheduler
 - Start Backend API
-- Start Frontend (nginx)
 
 ### 3.2 Check service status
 ```bash
-docker-compose ps
+docker compose -f docker-compose-prod.yml --env-file .env.prod ps
 ```
 
 ### 3.3 View logs
 ```bash
 # All services
-docker-compose logs -f
+docker compose -f docker-compose-prod.yml --env-file .env.prod logs -f
 
 # Specific service
-docker-compose logs -f backend
-docker-compose logs -f frontend
-docker-compose logs -f airflow-webserver
+docker compose -f docker-compose-prod.yml --env-file .env.prod logs -f backend
+docker compose -f docker-compose-prod.yml --env-file .env.prod logs -f airflow-webserver
 ```
 
 ## Step 4: Verify Deployment
@@ -159,7 +135,7 @@ curl http://localhost:8082/health
 
 ### 4.2 Access services
 
-- **Frontend**: `http://YOUR_EC2_PUBLIC_IP`
+- **Frontend**: Hosted on Vercel
 - **Backend API**: `http://YOUR_EC2_PUBLIC_IP:8000`
 - **API Docs**: `http://YOUR_EC2_PUBLIC_IP:8000/docs`
 - **Airflow UI**: `http://YOUR_EC2_PUBLIC_IP:8082`
@@ -233,12 +209,12 @@ sudo certbot --nginx -d yourdomain.com
 
 ### Stop all services
 ```bash
-docker-compose down
+docker compose -f docker-compose-prod.yml --env-file .env.prod down
 ```
 
 ### Stop and remove volumes (WARNING: deletes data)
 ```bash
-docker-compose down -v
+docker compose -f docker-compose-prod.yml --env-file .env.prod down -v
 ```
 
 Notes:
@@ -248,31 +224,30 @@ Notes:
 
 ### Restart a specific service
 ```bash
-docker-compose restart backend
-docker-compose restart frontend
+docker compose -f docker-compose-prod.yml --env-file .env.prod restart backend
 ```
 
 ### View logs
 ```bash
-docker-compose logs -f [service_name]
+docker compose -f docker-compose-prod.yml --env-file .env.prod logs -f [service_name]
 ```
 
 ### Execute commands in containers
 ```bash
 # Access backend container
-docker-compose exec backend bash
+docker compose -f docker-compose-prod.yml --env-file .env.prod exec backend bash
 
 # Access Airflow container
-docker-compose exec airflow-webserver bash
+docker compose -f docker-compose-prod.yml --env-file .env.prod exec airflow-webserver bash
 
 # Run database migrations
-docker-compose exec backend alembic upgrade head
+docker compose -f docker-compose-prod.yml --env-file .env.prod exec backend alembic upgrade head
 ```
 
 ### Update and redeploy
 ```bash
 git pull
-docker-compose up -d --build
+docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --build
 ```
 
 ## Troubleshooting
@@ -321,19 +296,19 @@ docker system prune -a
 ### Backup databases
 ```bash
 # Backup Airflow database
-docker-compose exec postgres_airflow pg_dump -U postgres airflow > airflow_backup.sql
+docker compose -f docker-compose-prod.yml --env-file .env.prod exec postgres_airflow pg_dump -U postgres airflow > airflow_backup.sql
 
 # Backup Flights database
-docker-compose exec postgres_flights pg_dump -U daniel flights_db > flights_backup.sql
+docker compose -f docker-compose-prod.yml --env-file .env.prod exec postgres_flights pg_dump -U daniel flights_db > flights_backup.sql
 ```
 
 ### Restore databases
 ```bash
 # Restore Airflow database
-cat airflow_backup.sql | docker-compose exec -T postgres_airflow psql -U postgres airflow
+cat airflow_backup.sql | docker compose -f docker-compose-prod.yml --env-file .env.prod exec -T postgres_airflow psql -U postgres airflow
 
 # Restore Flights database
-cat flights_backup.sql | docker-compose exec -T postgres_flights psql -U daniel flights_db
+cat flights_backup.sql | docker compose -f docker-compose-prod.yml --env-file .env.prod exec -T postgres_flights psql -U daniel flights_db
 ```
 
 ## Security Considerations

@@ -14,6 +14,7 @@ Key Concepts for Junior Data Engineers:
 from typing import Optional, List
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 import structlog
 
@@ -378,6 +379,7 @@ async def get_airline_specific_destinations(
     
     # Search filters
     search: Optional[str] = Query(None, description="Search destination names"),
+    lang: str = Query("en", description="Destination language (en or he)"),
     
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
@@ -402,29 +404,54 @@ async def get_airline_specific_destinations(
         if date_to:
             base_query = base_query.filter(Flight.scheduled_time <= date_to)
         
-        # Get unique destinations for this airline
-        query = base_query.with_entities(Flight.location_en).distinct()
-        
+        destination_field = Flight.country_he if lang.lower().startswith("he") else Flight.location_city_en
+
         # Apply search filter
         if search:
-            query = query.filter(Flight.location_en.ilike(f"%{search}%"))
-        
-        # Get total count
-        total_count = query.count()
+            base_query = base_query.filter(destination_field.ilike(f"%{search}%"))
+
+        # Build aggregated query per destination
+        query = base_query.with_entities(
+            destination_field.label("destination"),
+            func.count().label("flights_count"),
+            func.round(100.0 * func.avg(
+                case(
+                    (Flight.delay_minutes.between(0, 20), 1),
+                    else_=0
+                )
+            )).label("on_time_percentage"),
+            func.round(func.avg(Flight.delay_minutes)).label("avg_delay_minutes"),
+            func.round(100.0 * func.avg(
+                case(
+                    (Flight.status_en == "CANCELED", 1),
+                    else_=0
+                )
+            )).label("cancel_percentage")
+        ).group_by(destination_field).order_by(func.count().desc())
+
+        # Get total count of destination groups
+        count_query = db.query(func.count()).select_from(
+            base_query.with_entities(destination_field).distinct().subquery()
+        )
+        total_count = count_query.scalar() or 0
         
         # Calculate pagination
         offset = (page - 1) * size
-        total_pages = (total_count + size - 1) // size
+        total_pages = (total_count + size - 1) // size if total_count else 0
         
         # Get destinations
         destinations = query.offset(offset).limit(size).all()
         
         # Convert to response format
         destination_data = []
-        for dest in destinations:
+        for row in destinations:
             destination_data.append({
-                "destination": dest.location_en,
-                "airline_code": airline_code.upper()
+                "destination": row.destination,
+                "airline_code": airline_code.upper(),
+                "total_flights": int(row.flights_count or 0),
+                "on_time_percentage": int(row.on_time_percentage or 0),
+                "avg_delay_minutes": int(row.avg_delay_minutes or 0),
+                "cancellation_percentage": int(row.cancel_percentage or 0)
             })
         
         return {

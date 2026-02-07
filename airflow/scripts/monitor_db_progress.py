@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Script to poll the flights table count and print ETL progress.
+# Steps:
+# 1) Read initial count from DB (or CLI).
+# 2) Sleep for the configured interval.
+# 3) Query current count and compute deltas/rate.
+# 4) Print progress until interrupted.
 """
 Monitor database record count during ETL processing.
 
