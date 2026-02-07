@@ -356,8 +356,6 @@ class TestLoad:
             "status_english": "DEPARTED",
             "status_hebrew": "יצא",
             "delay_minutes": 30,
-            "scheduled_departure_time": "2025-01-15T10:00:00",
-            "actual_departure_time": "2025-01-15T10:30:00",
         }])
 
         mock_conn = MagicMock()

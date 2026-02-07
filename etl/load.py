@@ -54,8 +54,8 @@ def create_flights_table_if_not_exists(conn) -> None:
                 status_en VARCHAR(100),
                 status_he VARCHAR(100),
                 delay_minutes INTEGER,
-                scheduled_departure_time VARCHAR(50),
-                actual_departure_time VARCHAR(50)
+                scrape_timestamp TIMESTAMP,
+                raw_s3_path VARCHAR(500)
             );
         """)
         conn.commit()
@@ -82,6 +82,7 @@ def upsert_flight_data(df: pd.DataFrame, conn) -> int:
 
     cursor = conn.cursor()
     try:
+        now = pd.Timestamp.now()
         data_tuples = []
         for i in range(len(df)):
             row = df.iloc[i]
@@ -105,8 +106,8 @@ def upsert_flight_data(df: pd.DataFrame, conn) -> int:
                 str(row.get("status_english", "")),
                 str(row.get("status_hebrew", "")),
                 int(row["delay_minutes"]) if pd.notna(row.get("delay_minutes")) else None,
-                str(row.get("scheduled_departure_time", "")),
-                str(row.get("actual_departure_time", "")),
+                now,
+                None,
             ))
 
         cursor.executemany("""
@@ -115,14 +116,14 @@ def upsert_flight_data(df: pd.DataFrame, conn) -> int:
                 scheduled_time, actual_time, airline_name, location_en, location_he,
                 location_city_en, country_en, country_he, terminal, checkin_counters,
                 checkin_zone, status_en, status_he, delay_minutes,
-                scheduled_departure_time, actual_departure_time
+                scrape_timestamp, raw_s3_path
             ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (flight_id) DO UPDATE SET
                 actual_time = EXCLUDED.actual_time,
                 status_en = EXCLUDED.status_en,
                 status_he = EXCLUDED.status_he,
                 delay_minutes = EXCLUDED.delay_minutes,
-                actual_departure_time = EXCLUDED.actual_departure_time
+                scrape_timestamp = EXCLUDED.scrape_timestamp
         """, data_tuples)
 
         rows = len(data_tuples)
