@@ -1,12 +1,13 @@
 import os
 from typing import List
+from urllib.parse import urlparse
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     # Database settings
     db_host: str = "localhost"
-    db_port: int = 5433  # Changed to 5433 to match Airflow's postgres_flights
+    db_port: int = 5432
     db_name: str = "flights_db"
     db_user: str = "daniel"
     db_password: str = "daniel"
@@ -14,6 +15,14 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Build database URL from individual components"""
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
+            # Normalize Railway/Heroku-style URLs for SQLAlchemy
+            if database_url.startswith("postgres://"):
+                return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+            if database_url.startswith("postgresql://"):
+                return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            return database_url
         return f"postgresql+psycopg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
     # API settings

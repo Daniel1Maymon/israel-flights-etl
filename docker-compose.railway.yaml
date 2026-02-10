@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for flights data
+  # COMMENTED OUT FOR RAILWAY - Use Railway's Managed Postgres instead
+  # Uncomment this section for local development
+  # postgres_flights:
+  #   container_name: postgres_flights
+  #   image: postgres:16.3
+  #   environment:
+  #     - POSTGRES_USER=${POSTGRES_FLIGHTS_USER:-daniel}
+  #     - POSTGRES_PASSWORD=${POSTGRES_FLIGHTS_PASSWORD:-daniel}
+  #     - POSTGRES_DB=${POSTGRES_FLIGHTS_DB:-flights_db}
+  #     - POSTGRES_PORT=5432
+  #   ports:
+  #     - "${POSTGRES_FLIGHTS_PORT:-5433}:5432"
+  #   volumes:
+  #     - ${POSTGRES_FLIGHTS_DATA_DIR:-postgres_flights_data}:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_FLIGHTS_USER:-daniel} -d ${POSTGRES_FLIGHTS_DB:-flights_db}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+  #   restart: unless-stopped
+  #   networks:
+  #     - israel-flights-network
+
+  # Lightweight ETL runner (replaces Airflow)
+  # Railway will inject DATABASE_URL from managed Postgres
+  etl:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile
+    container_name: etl_runner
+    # REMOVED depends_on for Railway deployment
+    # depends_on:
+    #   postgres_flights:
+    #     condition: service_healthy
+    environment:
+      # Railway provides DATABASE_URL - ETL code needs to parse this
+      # Fallback to individual vars for local development
+      - DATABASE_URL=${DATABASE_URL}
+      - POSTGRES_FLIGHTS_HOST=${POSTGRES_FLIGHTS_HOST:-localhost}
+      - POSTGRES_FLIGHTS_PORT=${POSTGRES_FLIGHTS_PORT:-5432}
+      - POSTGRES_FLIGHTS_DB=${POSTGRES_FLIGHTS_DB:-flights_db}
+      - POSTGRES_FLIGHTS_USER=${POSTGRES_FLIGHTS_USER:-daniel}
+      - POSTGRES_FLIGHTS_PASSWORD=${POSTGRES_FLIGHTS_PASSWORD:-daniel}
+      - CKAN_BASE_URL=${CKAN_BASE_URL:-https://data.gov.il/api/3/action/datastore_search}
+      - CKAN_RESOURCE_ID=${CKAN_RESOURCE_ID:-e83f763b-b7d7-479e-b172-ae981ddc6de5}
+      - CKAN_BATCH_SIZE=${CKAN_BATCH_SIZE:-1000}
+      - SCHEDULE_INTERVAL_MINUTES=${SCHEDULE_INTERVAL_MINUTES:-15}
+    # Healthcheck for Railway monitoring
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    # Networks commented out for Railway - Railway handles networking
+    # networks:
+    #   - israel-flights-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.railway
+    container_name: backend_api
+    # REMOVED depends_on for Railway deployment
+    # depends_on:
+    #   postgres_flights:
+    #     condition: service_healthy
+    environment:
+      # Railway injects DATABASE_URL and PORT
+      # PORT is Railway's dynamic port assignment
+      - DATABASE_URL=${DATABASE_URL}
+      - PORT=${PORT:-8000}
+      # Fallback individual DB vars for local development
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-flights_db}
+      - DB_USER=${DB_USER:-daniel}
+      - DB_PASSWORD=${DB_PASSWORD:-daniel}
+      # Application settings
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - API_HOST=${API_HOST:-0.0.0.0}
+    # Local development volume mount - commented out for Railway
+    # volumes:
+    #   - ./backend/app:/app/app
+    ports:
+      # Railway will expose this via PORT variable
+      - "${PORT:-8000}:${PORT:-8000}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    # Networks commented out for Railway
+    # networks:
+    #   - israel-flights-network
+
+  # Frontend
+  # COMMENTED OUT FOR RAILWAY - Deploy frontend separately on Vercel
+  # Uncomment for local development
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     args:
+  #       - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+  #   container_name: frontend_app
+  #   depends_on:
+  #     - backend
+  #   ports:
+  #     - "${FRONTEND_PORT:-80}:80"
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 10s
+  #   restart: unless-stopped
+  #   networks:
+  #     - israel-flights-network
+
+# Volumes commented out for Railway - managed Postgres doesn't need local volumes
+# volumes:
+#   postgres_flights_data:
+#     driver: local
+
+# Networks commented out for Railway - Railway handles networking automatically
+# networks:
+#   israel-flights-network:
+#     driver: bridge
