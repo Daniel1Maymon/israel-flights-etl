@@ -19,43 +19,39 @@ A comprehensive end-to-end data pipeline for processing and visualizing Israeli 
 
 2. **Start all services with Docker Compose:**
    ```bash
-   # Start ETL pipeline (Airflow + PostgreSQL)
-   cd airflow && docker-compose up -d
-   
-   # Start Backend API
-   cd ../backend && docker-compose up -d
-   
-   # Start Frontend (development)
-   cd ../frontend && npm install && npm run dev
+   # Start all backend services (ETL + Database + API)
+   docker compose up -d --build
+
+   # Or for production deployment
+   docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --build
    ```
 
 3. **Access the applications:**
-   - **Frontend Dashboard**: http://localhost:3000
+   - **Frontend Dashboard**: Deployed on Vercel (see deployment section)
    - **Backend API**: http://localhost:8000
    - **API Documentation**: http://localhost:8000/docs
-   - **Airflow UI**: http://localhost:8080
 
 ## 📁 Project Structure
 
 ```
 israel-flights-etl/
 ├── docs/                       # 📚 All documentation
-├── airflow/                    # 🔄 ETL Pipeline (Airflow)
+├── etl/                        # 🔄 ETL Pipeline (Lightweight Python Scheduler)
 ├── backend/                    # 🚀 FastAPI Backend
-├── frontend/                   # 🎨 React Frontend
+├── frontend/                   # 🎨 React Frontend (deployed on Vercel)
 ├── data/                       # 📊 Data storage
-└── utils/                      # 🛠️ Shared utilities
+└── DEPLOYMENT.md               # 📖 Deployment guide
 ```
 
 ## 🏗️ Architecture Overview
 
-**Data Flow**: CKAN API → S3 (raw) → Airflow (ETL) → PostgreSQL (clean) → FastAPI (serve) → React (visualize)
+**Data Flow**: CKAN API → ETL Runner (scheduled) → PostgreSQL (clean) → FastAPI (serve) → React (visualize)
 
 ### Key Components
 
-- **ETL Pipeline**: Automated data extraction, transformation, and loading every 15 minutes
+- **ETL Pipeline**: Automated data extraction, transformation, and loading every 15 minutes using a lightweight Python scheduler
 - **Backend API**: 15+ RESTful endpoints with advanced filtering and analytics
-- **Frontend Dashboard**: Interactive React dashboard with real-time data switching
+- **Frontend Dashboard**: Interactive React dashboard deployed on Vercel
 - **Analytics Engine**: Sophisticated airline performance KPIs and data quality assessment
 
 ## 📚 Documentation
@@ -63,7 +59,7 @@ israel-flights-etl/
 All project documentation is organized in the [`docs/`](docs/) folder:
 
 - **[Project Guide](docs/guides/PROJECT_GUIDE.md)** - Complete end-to-end guide (setup, run, troubleshooting)
-- **[Services Summary](docs/services/SERVICES_SUMMARY.md)** - What each service does and how it’s used
+- **[Services Summary](docs/services/SERVICES_SUMMARY.md)** - What each service does and how it's used
 - **[System Architecture](docs/architecture/BACKEND_SYSTEM_DESIGN.md)** - Detailed architecture and design
 - **[Backend API Spec](docs/api/BACKEND_SPECIFICATION.md)** - API endpoints and behavior
 - **[Field Mapping](docs/reference/FIELD_MAPPING_TABLE.md)** - Source→target field mapping
@@ -73,9 +69,10 @@ All project documentation is organized in the [`docs/`](docs/) folder:
 
 ### ETL Pipeline
 - **Automated Data Extraction** from Israel's official flight data API
+- **Lightweight Scheduler** using APScheduler (no Airflow overhead)
 - **Data Validation** and quality checks at each stage
-- **S3 Storage** for raw and processed data versioning
 - **PostgreSQL Integration** with upsert logic for data consistency
+- **Configurable Schedule** (default: every 15 minutes)
 
 ### Backend API
 - **15+ RESTful Endpoints** for comprehensive data access
@@ -89,6 +86,7 @@ All project documentation is organized in the [`docs/`](docs/) folder:
 - **Theme Switching** (Light/Dark mode)
 - **Advanced Filtering** and search capabilities
 - **Responsive Design** for all device sizes
+- **Deployed on Vercel** for optimal CDN performance
 
 ## 🛠️ Development
 
@@ -112,8 +110,11 @@ All project documentation is organized in the [`docs/`](docs/) folder:
 
 3. **ETL Pipeline Development:**
    ```bash
-   cd airflow
-   # Follow Airflow setup instructions in docs/
+   cd etl
+   # Install dependencies
+   pip install -r requirements.txt
+   # Run ETL manually
+   python -m etl.main
    ```
 
 ### Testing
@@ -127,18 +128,30 @@ All project documentation is organized in the [`docs/`](docs/) folder:
 ### Production Deployment
 
 The system is designed for cloud deployment with:
-- **Container Orchestration** (Docker Swarm/Kubernetes)
-- **Database Scaling** (PostgreSQL with connection pooling)
-- **Load Balancing** (Nginx/HAProxy)
-- **Monitoring** (Prometheus/Grafana)
+- **Backend & Database**: Docker Compose on EC2
+- **Frontend**: Vercel (automatic deployments from Git)
+- **ETL Runner**: Docker container with APScheduler on EC2
+- **Database**: PostgreSQL with persistent volumes
 
-See [docs/architecture/BACKEND_SYSTEM_DESIGN.md](docs/architecture/BACKEND_SYSTEM_DESIGN.md) for detailed deployment architecture.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+
+### Deployment Architecture
+
+- **Frontend**: Deployed on Vercel
+  - Automatic builds from Git pushes
+  - Global CDN distribution
+  - Environment variable configuration via Vercel dashboard
+
+- **Backend**: Deployed on EC2 with Docker Compose
+  - PostgreSQL database
+  - FastAPI backend
+  - Lightweight ETL runner with APScheduler
 
 ## 📊 Data Sources
 
 - **Primary Source**: [Israel Open Data Portal](https://data.gov.il) - Flight data API
 - **Data Format**: JSON with 1000+ records per batch
-- **Update Frequency**: Every 15 minutes via Airflow DAG
+- **Update Frequency**: Every 15 minutes via scheduled ETL runner
 - **Data Quality**: Automated validation and completeness checks
 
 ## 🤝 Contributing

@@ -36,7 +36,7 @@ This document provides a comprehensive overview of all services, tools, and tech
 - Reliable government infrastructure
 
 **How It's Used**:
-- Airflow DAG calls this API every 15 minutes
+- ETL runner calls this API every 15 minutes (via APScheduler)
 - Downloads all flight records using pagination (1000 records per batch)
 - Data includes: airline codes, flight numbers, scheduled/actual times, terminals, status, etc.
 
@@ -44,38 +44,38 @@ This document provides a comprehensive overview of all services, tools, and tech
 
 ## Orchestration Services
 
-### 2. Apache Airflow
-**Type**: Workflow orchestration platform  
+### 2. ETL Runner (Lightweight Python Scheduler)
+**Type**: Python-based ETL scheduler using APScheduler
 **Purpose**: Automates and schedules the ETL pipeline
 
 **Details**:
-- **Version**: 3.0.4
-- **Port**: 8082 (web UI)
-- **Schedule**: Every 15 minutes (`*/15 * * * *`)
-- **DAG Name**: `flight_data_pipeline`
-- **Executor**: LocalExecutor
+- **Technology**: Python 3.11 with APScheduler
+- **Container**: `etl` service
+- **Schedule**: Every 15 minutes (configurable via `SCHEDULE_INTERVAL_MINUTES`)
+- **Executor**: BlockingScheduler with interval-based jobs
+- **Monitoring**: Docker logs (`docker compose logs -f etl`)
 
 **Why We Use It**:
-- Industry-standard ETL orchestration tool
-- Built-in scheduling and retry logic
-- Web UI for monitoring and debugging
-- Task dependency management
-- XCom for inter-task communication
+- Lightweight and simple to deploy (single container)
+- Minimal resource overhead compared to Airflow
+- Easy to understand and modify (direct Python code)
+- Built-in scheduling with APScheduler
+- No need for web UI or metadata database
 
 **How It's Used**:
-- **Scheduler**: Automatically triggers DAG runs every 15 minutes
-- **Web Server**: Provides UI at http://localhost:8082
-- **Tasks**:
-  1. `fetch_data` - Downloads data from CKAN API
-  2. `validate_data` - Validates raw data integrity
-  3. `transform_data` - Transforms and calculates delays
-  4. `load_to_db` - Loads data into PostgreSQL
+- **Scheduler**: Automatically triggers pipeline runs every 15 minutes
+- **Pipeline Functions**:
+  1. `fetch_flights()` - Downloads data from CKAN API
+  2. `transform_records()` - Transforms and validates data
+  3. `load_to_db()` - Loads data into PostgreSQL with upsert logic
+- **Monitoring**: View logs via `docker compose logs etl`
 
 **Key Features**:
-- Task retry on failure (1 retry with 5-minute delay)
-- Task logging and monitoring
-- DAG visualization
-- Historical run tracking
+- Simple configuration via environment variables
+- Graceful shutdown handling (SIGTERM/SIGINT)
+- Runs immediately on startup, then on schedule
+- Exception handling with logging
+- Direct database connection (no intermediary storage required)
 
 ---
 
@@ -93,25 +93,24 @@ This document provides a comprehensive overview of all services, tools, and tech
 - **Versioning**: Enabled for data lineage
 
 **Why We Use It**:
-- Cost-effective long-term storage
+- Cost-effective long-term storage (optional backup feature)
 - High durability (99.999999999%)
 - Scalable (no size limits)
 - Versioned storage for data lineage
-- Easy integration with Airflow
+- Easy integration with Python boto3
 
-**How It's Used**:
-- **Raw Storage**: Stores original JSON data from CKAN API
-  - Timestamped files for historical tracking
-  - Used for data recovery and auditing
-- **Processed Storage**: Stores transformed CSV data
-  - Cleaned and validated data
-  - Ready for database loading
-  - Used for reprocessing if needed
+**How It's Used** (Optional):
+- S3 storage is **optional** and primarily used for backups
+- The ETL pipeline works without S3 by default
+- When enabled (`ENABLE_DB_BACKUPS=true`):
+  - Database backups can be uploaded to S3
+  - Provides disaster recovery option
 
 **Data Flow**:
-1. Airflow uploads raw JSON → S3 `uploads/` folder
-2. Airflow transforms data → S3 `processed/` folder
-3. Airflow downloads processed CSV → Loads to PostgreSQL
+1. ETL runner fetches data from CKAN API
+2. Transforms data in memory
+3. Loads directly to PostgreSQL via upsert
+4. (Optional) Backups to S3 if enabled
 
 ---
 
@@ -136,7 +135,7 @@ This document provides a comprehensive overview of all services, tools, and tech
 - Easy Docker deployment
 
 **How It's Used**:
-- **ETL Pipeline**: Airflow loads transformed data via upsert operations
+- **ETL Pipeline**: ETL runner loads transformed data via upsert operations
 - **Backend API**: FastAPI queries PostgreSQL for flight data
 - **Data Model**: Single `flights` table with all flight information
 - **Indexes**: Optimized for common queries (airline, date, direction)

@@ -539,7 +539,7 @@ backend/
 │   ├── config.py          # Configuration
 │   └── database.py        # Database connection
 ├── requirements.txt       # Dependencies
-├── Dockerfile            # Container config
+├── Dockerfile.railway    # Container config
 └── docker-compose.yaml   # Multi-service setup
 ```
 

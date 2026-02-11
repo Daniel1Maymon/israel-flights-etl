@@ -48,7 +48,7 @@ This guide provides the fastest path to deploy your Israel Flights ETL system to
 1. Go to **Settings** tab:
    - **Service Name**: `backend` (important!)
    - **Root Directory**: `backend`
-   - **Dockerfile Path**: `Dockerfile`
+   - **Dockerfile Path**: `Dockerfile.railway`
 
 ### Set Environment Variables
 Go to **Variables** tab and add:
