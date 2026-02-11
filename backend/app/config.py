@@ -35,13 +35,28 @@ class Settings(BaseSettings):
     # CORS settings
     # Can be set via CORS_ORIGINS environment variable (comma-separated)
     # Default includes common localhost ports for development
+    # For production, set CORS_ORIGINS to your Vercel URL: https://your-app.vercel.app
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082,http://localhost:8083,http://127.0.0.1:8083,http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1"
-    
+
     @property
     def cors_origins_list(self) -> List[str]:
-        """Parse CORS origins from comma-separated string"""
+        """
+        Parse CORS origins from comma-separated string.
+
+        Railway deployment: Set CORS_ORIGINS environment variable to:
+        - Vercel frontend URL: https://your-app.vercel.app
+        - Multiple origins: https://your-app.vercel.app,https://your-app-preview.vercel.app
+
+        The backend will allow requests from these origins.
+        """
         if isinstance(self.cors_origins, str):
-            return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+            origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+            # Also support Railway's internal network (for ETL service communication)
+            railway_internal = os.getenv("RAILWAY_PRIVATE_DOMAIN")
+            if railway_internal:
+                origins.append(f"http://{railway_internal}")
+                origins.append(f"https://{railway_internal}")
+            return origins
         return self.cors_origins if isinstance(self.cors_origins, list) else []
     
     # Pagination settings
