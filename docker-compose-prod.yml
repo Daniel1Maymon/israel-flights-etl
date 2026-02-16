@@ -43,7 +43,7 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.railway
     container_name: backend_api
     depends_on:
       postgres_flights:
