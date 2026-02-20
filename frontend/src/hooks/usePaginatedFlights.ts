@@ -54,7 +54,7 @@ export const usePaginatedFlights = (baseUrl: string): UsePaginatedFlightsResult 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(20);
   const [sortField, setSortField] = useState('scheduled_time');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 

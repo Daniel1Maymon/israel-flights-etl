@@ -30,7 +30,7 @@ router = APIRouter()
 )
 async def list_flights(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     direction: Optional[str] = Query(None, description="Filter by direction (A=Arrival, D=Departure)"),
     airline_code: Optional[str] = Query(None, description="Filter by airline code"),
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -128,7 +128,7 @@ async def search_flights(
     q: str = Query(..., min_length=2, description="Search query"),
     search_fields: Optional[str] = Query(None, description="Comma-separated fields to search in"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     direction: Optional[str] = Query(None, description="Filter by direction"),
     airline_code: Optional[str] = Query(None, description="Filter by airline code"),
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -305,7 +305,7 @@ async def get_flight_stats(
 async def list_airlines(
     search: Optional[str] = Query(None, description="Search airline names"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     db: Session = Depends(get_database)
 ):
     """Get list of unique airlines with pagination"""
@@ -359,7 +359,7 @@ async def list_destinations(
     search: Optional[str] = Query(None, description="Search destination names"),
     country: Optional[str] = Query(None, description="Filter by country"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     db: Session = Depends(get_database)
 ):
     """Get list of unique destinations with pagination"""

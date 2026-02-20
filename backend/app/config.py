@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     db_name: str = "flights_db"
     db_user: str = "daniel"
     db_password: str = "daniel"
+    postgres_flights_host: str | None = None
+    postgres_flights_port: int | None = None
+    postgres_flights_db: str | None = None
+    postgres_flights_user: str | None = None
+    postgres_flights_password: str | None = None
     
     @property
     def database_url(self) -> str:
@@ -23,6 +28,14 @@ class Settings(BaseSettings):
             if database_url.startswith("postgresql://"):
                 return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
             return database_url
+        # Support shared ETL-style env naming used in project root .env
+        pg_host = self.postgres_flights_host
+        pg_port = self.postgres_flights_port
+        pg_db = self.postgres_flights_db
+        pg_user = self.postgres_flights_user
+        pg_password = self.postgres_flights_password
+        if all([pg_host, pg_port, pg_db, pg_user, pg_password]):
+            return f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
         return f"postgresql+psycopg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
     # API settings
@@ -60,8 +73,8 @@ class Settings(BaseSettings):
         return self.cors_origins if isinstance(self.cors_origins, list) else []
     
     # Pagination settings
-    default_page_size: int = 50
-    max_page_size: int = 200
+    default_page_size: int = 20
+    max_page_size: int = 50
     
     # Logging
     log_level: str = "INFO"

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/v1", tags=["destinations"])
 )
 async def list_destinations(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     search: Optional[str] = Query(None, description="Search destination name"),
     db: Session = Depends(get_db)
 ):

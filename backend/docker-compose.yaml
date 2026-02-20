@@ -2,7 +2,7 @@ services:
   backend:
     build: .
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8001}:8000"
     environment:
       - DATABASE_URL=postgresql://daniel:daniel@postgres_flights:5432/flights_db
       - DB_HOST=postgres_flights
@@ -24,7 +24,6 @@ services:
       start_period: 40s
 
   postgres_flights:
-    container_name: postgres_flights
     image: postgres:16.3
     environment:
       - POSTGRES_USER=daniel
@@ -32,7 +31,7 @@ services:
       - POSTGRES_DB=flights_db
       - POSTGRES_PORT=5432
     ports:
-      - "5433:5432"
+      - "${BACKEND_DB_PORT:-5434}:5432"
     volumes:
       # IMPORTANT:
       # - If `POSTGRES_FLIGHTS_DATA_DIR` is NOT set, this uses a named Docker volume (deleted by `docker-compose down -v`).

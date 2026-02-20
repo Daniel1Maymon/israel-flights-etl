@@ -221,7 +221,7 @@ async def get_airline_destinations(
     
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     
     # Database dependency
     db: Session = Depends(get_database)
@@ -383,7 +383,7 @@ async def get_airline_specific_destinations(
     
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     
     # Database dependency
     db: Session = Depends(get_database)
@@ -479,7 +479,7 @@ async def get_airline_specific_destinations(
 )
 async def get_all_destinations(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     search: Optional[str] = Query(None, description="Search destination name"),
     db: Session = Depends(get_database)
 ):

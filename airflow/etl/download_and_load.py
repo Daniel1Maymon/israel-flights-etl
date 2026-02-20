@@ -18,6 +18,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 import boto3
 import psycopg2
+from psycopg2.extras import execute_values
 from multiprocessing import Pool, cpu_count
 from functools import partial
 # Airflow imports - only import if available
@@ -316,6 +317,9 @@ def upsert_flight_data(df: pd.DataFrame, conn) -> int:
         
     cursor = conn.cursor()
     rows_loaded = 0
+    batch_size = int(os.getenv("UPSERT_BATCH_SIZE", "500"))
+    lock_timeout_ms = int(os.getenv("POSTGRES_LOCK_TIMEOUT_MS", "15000"))
+    statement_timeout_ms = int(os.getenv("POSTGRES_STATEMENT_TIMEOUT_MS", "180000"))
 
     try:
         # Prepare data for bulk insert
@@ -369,26 +373,35 @@ def upsert_flight_data(df: pd.DataFrame, conn) -> int:
                 str(row['raw_s3_path'])
             ))
         
-        # Use executemany for bulk insert (much faster than individual INSERTs)
-        cursor.executemany("""
-                INSERT INTO flights (
-                    flight_id, airline_code, flight_number, direction, location_iata,
-                    scheduled_time, actual_time, airline_name, location_en, location_he,
-                    location_city_en, country_en, country_he, terminal, checkin_counters,
-                    checkin_zone, status_en, status_he, delay_minutes, scrape_timestamp, raw_s3_path
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (flight_id) DO UPDATE SET
-                    actual_time = EXCLUDED.actual_time,
-                    status_en = EXCLUDED.status_en,
-                    status_he = EXCLUDED.status_he,
-                    delay_minutes = EXCLUDED.delay_minutes,
-                    country_en = EXCLUDED.country_en,
-                    country_he = EXCLUDED.country_he,
-                    scrape_timestamp = EXCLUDED.scrape_timestamp,
-                    raw_s3_path = EXCLUDED.raw_s3_path
-        """, data_tuples)
-        
-        rows_loaded = len(data_tuples)
+        # Prevent long, silent waits on locks or oversized statements.
+        cursor.execute("SET LOCAL lock_timeout = %s", (f"{lock_timeout_ms}ms",))
+        cursor.execute("SET LOCAL statement_timeout = %s", (f"{statement_timeout_ms}ms",))
+
+        insert_sql = """
+            INSERT INTO flights (
+                flight_id, airline_code, flight_number, direction, location_iata,
+                scheduled_time, actual_time, airline_name, location_en, location_he,
+                location_city_en, country_en, country_he, terminal, checkin_counters,
+                checkin_zone, status_en, status_he, delay_minutes, scrape_timestamp, raw_s3_path
+            ) VALUES %s
+            ON CONFLICT (flight_id) DO UPDATE SET
+                actual_time = EXCLUDED.actual_time,
+                status_en = EXCLUDED.status_en,
+                status_he = EXCLUDED.status_he,
+                delay_minutes = EXCLUDED.delay_minutes,
+                country_en = EXCLUDED.country_en,
+                country_he = EXCLUDED.country_he,
+                scrape_timestamp = EXCLUDED.scrape_timestamp,
+                raw_s3_path = EXCLUDED.raw_s3_path
+        """
+
+        total = len(data_tuples)
+        for start in range(0, total, batch_size):
+            chunk = data_tuples[start:start + batch_size]
+            execute_values(cursor, insert_sql, chunk, page_size=len(chunk))
+            rows_loaded += len(chunk)
+            logging.info(f"Upsert progress: {rows_loaded}/{total} rows")
+
         conn.commit()
         logging.info(f"Upserted {rows_loaded} rows into flights table (inserted new or updated existing)")
         return rows_loaded
@@ -413,13 +426,18 @@ def create_processed_files_table_if_not_exists(conn) -> None:
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
-                file_name VARCHAR(255) PRIMARY KEY,
+                file_name VARCHAR(255),
                 s3_key VARCHAR(500) NOT NULL,
                 processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status VARCHAR(20) DEFAULT 'success'
             );
         """)
-        
+        # Ensure unique constraint exists (handles tables created without PRIMARY KEY)
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS processed_files_file_name_idx
+            ON processed_files (file_name);
+        """)
+
         conn.commit()
         logging.info("Processed files table created successfully or already exists")
         
@@ -800,10 +818,14 @@ def download_and_load_all_files(
         
         for i, s3_key in enumerate(all_files):
             file_name = s3_key.split('/')[-1]  # Get just the filename
-            logging.info(f"Processing file {i+1}/{len(all_files)}: {s3_key}")
-            
+            file_start_time = datetime.now()
+            logging.info(f"[FILE {i+1}/{len(all_files)}] ── START: {s3_key}")
+
             # Check if file already processed (unless force=True)
+            t0 = datetime.now()
             conn = get_postgres_connection()
+            conn_open_ms = (datetime.now() - t0).total_seconds() * 1000
+            logging.info(f"[FILE {i+1}/{len(all_files)}] DB conn #1 opened in {conn_open_ms:.0f}ms (check processed)")
             try:
                 logging.info(f"Checking processed_files for file_name={file_name} (s3_key={s3_key})")
                 if not force and is_file_processed(conn, file_name):
@@ -812,10 +834,12 @@ def download_and_load_all_files(
                     continue
             finally:
                 conn.close()
-            
+                logging.info(f"[FILE {i+1}/{len(all_files)}] DB conn #1 closed")
+
             # Process the file
             try:
                 # Download and process the file
+                t0 = datetime.now()
                 if s3_key.endswith('.gz'):
                     records = download_gzipped_json_from_s3(bucket_name, s3_key)
                 else:
@@ -824,34 +848,47 @@ def download_and_load_all_files(
                     with open(json_path, 'r') as f:
                         records = json.load(f)
                     os.remove(json_path)
-                
+                s3_download_ms = (datetime.now() - t0).total_seconds() * 1000
+                logging.info(f"[FILE {i+1}/{len(all_files)}] S3 download took {s3_download_ms:.0f}ms → {len(records)} records")
+
                 if not records or len(records) == 0:
                     logging.warning(f"No records found in {s3_key}, skipping")
                     files_skipped += 1
                     continue
-                
+
                 # Transform and load data
+                t0 = datetime.now()
                 df = transform_raw_flight_data(records)
                 df['flight_id'] = df.apply(compute_flight_uuid, axis=1)
-                
+                transform_ms = (datetime.now() - t0).total_seconds() * 1000
+                logging.info(f"[FILE {i+1}/{len(all_files)}] Transform took {transform_ms:.0f}ms")
+
+                t0 = datetime.now()
                 conn = get_postgres_connection()
+                conn_open_ms = (datetime.now() - t0).total_seconds() * 1000
+                logging.info(f"[FILE {i+1}/{len(all_files)}] DB conn #2 opened in {conn_open_ms:.0f}ms (upsert)")
                 try:
                     rows_loaded = upsert_flight_data(df, conn)
                     mark_file_processed(conn, file_name, s3_key, 'success')
                 finally:
                     conn.close()
-                
+                    logging.info(f"[FILE {i+1}/{len(all_files)}] DB conn #2 closed")
+
                 total_records += len(records)
                 total_rows_loaded += rows_loaded
                 files_processed += 1
-                logging.info(f"Processed {s3_key}: {len(records)} records, {rows_loaded} rows loaded")
-                
+                file_total_ms = (datetime.now() - file_start_time).total_seconds() * 1000
+                logging.info(f"[FILE {i+1}/{len(all_files)}] ── DONE in {file_total_ms:.0f}ms total | conn#1={conn_open_ms:.0f}ms s3={s3_download_ms:.0f}ms transform={transform_ms:.0f}ms")
+
             except Exception as e:
                 logging.error(f"Failed to process {s3_key}: {str(e)}")
                 files_failed += 1
-                
+
                 # Mark as failed in database
+                t0 = datetime.now()
                 conn = get_postgres_connection()
+                conn_open_ms = (datetime.now() - t0).total_seconds() * 1000
+                logging.info(f"[FILE {i+1}/{len(all_files)}] DB conn #3 (error path) opened in {conn_open_ms:.0f}ms")
                 try:
                     mark_file_processed(conn, file_name, s3_key, 'failed')
                 finally:

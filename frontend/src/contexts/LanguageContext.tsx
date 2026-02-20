@@ -30,8 +30,9 @@ const translations = {
     'language.hebrew': 'עברית',
     
     // Dashboard
-    'dashboard.title': 'Airline Performance Tracker',
-    'dashboard.subtitle': 'Historical airline data to help you choose the best flights',
+    'dashboard.title': 'Compare Airline Performance at TLV',
+    'dashboard.subtitle.line1': 'See which airlines operate on time before you book, including cancellation history',
+    'dashboard.subtitle.line2': 'Based on official Israel Airports Authority flight data, updated every 15 minutes and tracked over time',
     'dashboard.filters': 'Filters',
     'dashboard.search': 'Search airlines...',
     
@@ -144,8 +145,9 @@ const translations = {
     'language.hebrew': 'עברית',
     
     // Dashboard
-    'dashboard.title': 'מעקב ביצועי חברות תעופה',
-    'dashboard.subtitle': 'נתונים היסטוריים של חברות תעופה לעזרה בבחירת הטיסות הטובות ביותר',
+    'dashboard.title': 'השוואת ביצועי חברות תעופה בנתב״ג',
+    'dashboard.subtitle.line1': 'בדקו איזו חברה עומדת בזמנים לפני שמזמינים, כולל מידע על ביטולים',
+    'dashboard.subtitle.line2': 'מבוסס על נתוני טיסות מרשות שדות התעופה, המתעדכנים כל 15 דקות ונאספים לאורך זמן',
     'dashboard.filters': 'מסננים',
     'dashboard.search': 'חיפוש חברות תעופה...',
     
@@ -240,7 +242,7 @@ const translations = {
 };
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>('he');
 
   // Load language from localStorage on mount
   useEffect(() => {

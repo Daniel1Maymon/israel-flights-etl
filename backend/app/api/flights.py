@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1/flights", tags=["flights"])
 )
 async def list_flights(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     direction: Optional[str] = Query(None, description="Filter by direction (A=Arrival, D=Departure)"),
     airline_code: Optional[str] = Query(None, description="Filter by airline code"),
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -158,7 +158,7 @@ async def list_flights(
 )
 async def list_airlines(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     search: Optional[str] = Query(None, description="Search airline name or code"),
     db: Session = Depends(get_db)
 ):
@@ -218,7 +218,7 @@ async def list_airlines(
 )
 async def list_destinations(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     search: Optional[str] = Query(None, description="Search destination name"),
     country: Optional[str] = Query(None, description="Filter by country"),
     db: Session = Depends(get_db)
@@ -276,7 +276,7 @@ async def list_destinations(
 )
 async def list_all_destinations(
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=200, description="Items per page"),
+    size: int = Query(20, ge=1, le=50, description="Items per page"),
     search: Optional[str] = Query(None, description="Search destination name"),
     db: Session = Depends(get_db)
 ):

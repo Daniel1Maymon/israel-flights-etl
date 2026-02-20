@@ -296,7 +296,10 @@ const Index = () => {
                 {t('dashboard.title')}
               </h1>
               <p className="text-muted-foreground">
-                {t('dashboard.subtitle')}
+                {t('dashboard.subtitle.line1')}
+              </p>
+              <p className="text-muted-foreground">
+                {t('dashboard.subtitle.line2')}
               </p>
             </div>
           </div>
