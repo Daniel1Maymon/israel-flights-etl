@@ -7,7 +7,7 @@ const POPULAR_DESTINATIONS = [
   { en: "London",   he: "לונדון"   },
   { en: "Rome",     he: "רומא"     },
   { en: "New York", he: "ניו יורק" },
-  { en: "Paris",    he: "פריז"     },
+  { en: "Paris",    he: "פריס"     },
   { en: "Athens",   he: "אתונה"    },
 ];
 

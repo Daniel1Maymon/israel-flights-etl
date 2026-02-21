@@ -75,8 +75,8 @@ const Index = () => {
 
         {/* Subtitle */}
         <div className="mb-8 text-center space-y-1">
-          <p className="text-sm text-muted-foreground">{t("dashboard.subtitle.line1")}</p>
-          <p className="text-xs text-muted-foreground/70">{t("dashboard.subtitle.line2")}</p>
+          <p className="text-lg text-muted-foreground">{t("dashboard.subtitle.line1")}</p>
+          <p className="text-base text-muted-foreground/70">{t("dashboard.subtitle.line2")}</p>
         </div>
 
         {/* Hero search */}

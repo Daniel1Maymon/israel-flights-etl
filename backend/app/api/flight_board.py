@@ -29,7 +29,8 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1/flight-board", tags=["flight-board"])
 
-REFRESH_INTERVAL = 30  # seconds between DB re-queries on an open SSE connection
+REFRESH_INTERVAL = 30   # seconds between DB re-queries on an open SSE connection
+HEARTBEAT_INTERVAL = 10  # seconds between SSE keepalive comments
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 
@@ -231,7 +232,16 @@ async def stream_flight_board(
                 logger.error("SSE stream error", error=str(exc))
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Server error, retrying...'})}\n\n"
 
-            await asyncio.sleep(REFRESH_INTERVAL)
+            # Sleep REFRESH_INTERVAL total, but send SSE keepalive comments every
+            # HEARTBEAT_INTERVAL seconds so gunicorn workers are not considered idle.
+            elapsed = 0
+            while elapsed < REFRESH_INTERVAL:
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+                elapsed += HEARTBEAT_INTERVAL
+                if elapsed < REFRESH_INTERVAL:
+                    if await request.is_disconnected():
+                        return
+                    yield ": keepalive\n\n"
 
     return StreamingResponse(
         event_stream(),
