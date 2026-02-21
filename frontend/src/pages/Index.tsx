@@ -61,7 +61,10 @@ const Index = () => {
         <div className="flex items-center justify-between py-4 mb-8 border-b border-border">
           <div className="flex items-center gap-2">
             <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
-            <span className="text-2xl font-bold text-foreground">{t("dashboard.title")}</span>
+            <span className="text-2xl font-bold text-foreground">
+              <span className="sm:hidden">RankAir</span>
+              <span className="hidden sm:inline">{t("dashboard.title")}</span>
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <DatabaseToggle
