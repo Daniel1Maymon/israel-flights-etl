@@ -1,10 +1,21 @@
 """
-Flight Board endpoints — SSE stream and filter options for the live board
+Flight Board endpoints — SSE stream and filter options for the live board.
+
+Default board behaviour (no date filters supplied):
+  • "Today" is computed in Asia/Jerusalem (Israel Standard / Daylight time).
+  • Only flights whose scheduled_time falls on today's Israel date are shown.
+  • The earliest visible flight is 1 hour before the current Israel time
+    (so recently-departed / recently-arrived flights stay visible briefly).
+
+When the user supplies date_from / date_to those are treated as Israel-timezone
+day boundaries and fully replace the default window.
 """
 import asyncio
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,12 +29,48 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1/flight-board", tags=["flight-board"])
 
-REFRESH_INTERVAL = 30  # seconds between DB re-queries on the server
+REFRESH_INTERVAL = 30  # seconds between DB re-queries on an open SSE connection
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _compute_date_window(
+    date_from: Optional[date],
+    date_to: Optional[date],
+    now_il: Optional[datetime] = None,  # injectable so tests don't need to mock time
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Return (from_dt, to_dt) as timezone-aware datetimes in Asia/Jerusalem.
+
+    No explicit dates supplied (default board view):
+        from_dt = now_il - 1 hour          (1-hour-back cutoff)
+        to_dt   = end of today in Israel   (23:59:59.999999)
+
+    Explicit dates override the default completely.
+    Either or both can be None independently.
+    """
+    if date_from is None and date_to is None:
+        if now_il is None:
+            now_il = datetime.now(tz=ISRAEL_TZ)
+        from_dt = now_il - timedelta(hours=1)
+        to_dt = now_il.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return from_dt, to_dt
+
+    from_dt = (
+        datetime(date_from.year, date_from.month, date_from.day,
+                 0, 0, 0, tzinfo=ISRAEL_TZ)
+        if date_from else None
+    )
+    to_dt = (
+        datetime(date_to.year, date_to.month, date_to.day,
+                 23, 59, 59, 999999, tzinfo=ISRAEL_TZ)
+        if date_to else None
+    )
+    return from_dt, to_dt
+
 
 def _build_query(
     db: Session,
@@ -32,8 +79,8 @@ def _build_query(
     airline_code: Optional[str],
     location: Optional[str],
     terminal: Optional[str],
-    date_from: Optional[date],
-    date_to: Optional[date],
+    from_dt: Optional[datetime],
+    to_dt: Optional[datetime],
     sort_by: str,
     sort_order: str,
     page: int,
@@ -57,10 +104,10 @@ def _build_query(
         )
     if terminal:
         query = query.filter(Flight.terminal == terminal)
-    if date_from:
-        query = query.filter(Flight.scheduled_time >= date_from)
-    if date_to:
-        query = query.filter(Flight.scheduled_time <= date_to)
+    if from_dt:
+        query = query.filter(Flight.scheduled_time >= from_dt)
+    if to_dt:
+        query = query.filter(Flight.scheduled_time <= to_dt)
 
     sort_map = {
         "scheduled_time": Flight.scheduled_time,
@@ -69,8 +116,10 @@ def _build_query(
         "status_en": Flight.status_en,
         "flight_number": Flight.flight_number,
     }
-    field = sort_map.get(sort_by, Flight.scheduled_time)
-    query = query.order_by(field.desc() if sort_order == "desc" else field.asc())
+    primary = sort_map.get(sort_by, Flight.scheduled_time)
+    order_fn = primary.desc() if sort_order == "desc" else primary.asc()
+    # Stable secondary sort guarantees consistent page ordering
+    query = query.order_by(order_fn, Flight.flight_number.asc())
 
     total = query.count()
     offset = (page - 1) * size
@@ -111,20 +160,22 @@ async def stream_flight_board(
     direction: Optional[str] = Query(None, description="A=Arrivals, D=Departures"),
     flight_number: Optional[str] = Query(None),
     airline_code: Optional[str] = Query(None),
-    location: Optional[str] = Query(None, description="City/airport filter"),
+    location: Optional[str] = Query(None, description="City/airport partial-match filter"),
     terminal: Optional[str] = Query(None),
-    date_from: Optional[date] = Query(None),
-    date_to: Optional[date] = Query(None),
+    date_from: Optional[date] = Query(None, description="Start date (Israel timezone)"),
+    date_to: Optional[date] = Query(None, description="End date (Israel timezone)"),
     sort_by: str = Query("scheduled_time"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
 ):
     """
-    Server-Sent Events endpoint for the live flight board.
-    Sends the current page of matching flights immediately on connect,
-    then re-queries the database every REFRESH_INTERVAL seconds and
-    pushes updated data to the client.
+    Server-Sent Events stream for the live flight board.
+
+    • On connect: immediately sends current matching flights.
+    • Every REFRESH_INTERVAL seconds: re-queries the DB and pushes an update.
+    • The Israel-time window is re-evaluated on every refresh so the
+      1-hour cutoff slides forward correctly as time passes.
     """
 
     async def event_stream():
@@ -139,6 +190,8 @@ async def stream_flight_board(
                 def query_db():
                     db = SessionLocal()
                     try:
+                        # Re-compute on every iteration so the cutoff advances with real time
+                        from_dt, to_dt = _compute_date_window(date_from, date_to)
                         rows, total, total_pages = _build_query(
                             db=db,
                             direction=direction,
@@ -146,8 +199,8 @@ async def stream_flight_board(
                             airline_code=airline_code,
                             location=location,
                             terminal=terminal,
-                            date_from=date_from,
-                            date_to=date_to,
+                            from_dt=from_dt,
+                            to_dt=to_dt,
                             sort_by=sort_by,
                             sort_order=sort_order,
                             page=page,
@@ -170,7 +223,7 @@ async def stream_flight_board(
                         "has_next": page < total_pages,
                         "has_prev": page > 1,
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(tz=ISRAEL_TZ).isoformat(),
                 })
                 yield f"data: {payload}\n\n"
 

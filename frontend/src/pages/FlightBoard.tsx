@@ -78,22 +78,25 @@ function isDelayed(flight: FlightRow): boolean {
 // Time format
 // ---------------------------------------------------------------------------
 
+const IL_TZ = 'Asia/Jerusalem';
+
 function formatTime(iso: string | null, language: string): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleTimeString(language === 'he' ? 'he-IL' : 'en-GB', {
+  return new Date(iso).toLocaleTimeString(language === 'he' ? 'he-IL' : 'en-GB', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone: IL_TZ,
   });
 }
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';
-  const d = new Date(iso);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}`;
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: IL_TZ,
+  });
 }
 
 // ---------------------------------------------------------------------------

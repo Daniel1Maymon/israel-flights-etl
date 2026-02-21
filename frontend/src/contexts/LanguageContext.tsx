@@ -30,7 +30,7 @@ const translations = {
     'language.hebrew': 'עברית',
     
     // Dashboard
-    'dashboard.title': 'Compare Airline Performance at TLV',
+    'dashboard.title': 'RankAir – Compare Airline Performance at TLV',
     'dashboard.subtitle.line1': 'See which airlines operate on time before you book, including cancellation history',
     'dashboard.subtitle.line2': 'Based on official Israel Airports Authority flight data, updated every 15 minutes and tracked over time',
     'dashboard.filters': 'Filters',
@@ -119,6 +119,16 @@ const translations = {
     'search.placeholder': 'For example: London',
     'search.popularDestinations': 'Popular destinations:',
 
+    // Destination Performance Table
+    'performance.tableTitle': 'Airline Performance to {city}',
+    'performance.totalFlights': 'Total Flights',
+    'performance.onTimePct': 'On Time %',
+    'performance.cancelledPct': 'Cancelled %',
+    'performance.avgDelay': 'Avg Delay',
+    'performance.minutes': 'min',
+    'performance.noResults': 'No data found for this destination',
+    'performance.selectCity': 'Search for a destination to see airline performance',
+
     // Flights Table
     'flights.title': 'Historical Flight Data',
     'flights.direction': 'Direction',
@@ -197,7 +207,7 @@ const translations = {
     'language.hebrew': 'עברית',
     
     // Dashboard
-    'dashboard.title': 'השוואת ביצועי חברות תעופה בנתב״ג',
+    'dashboard.title': 'RankAir – השוואת ביצועי חברות תעופה בנתב״ג',
     'dashboard.subtitle.line1': 'בדקו איזו חברה עומדת בזמנים לפני שמזמינים, כולל מידע על ביטולים',
     'dashboard.subtitle.line2': 'מבוסס על נתוני טיסות מרשות שדות התעופה, המתעדכנים כל 15 דקות ונאספים לאורך זמן',
     'dashboard.filters': 'מסננים',
@@ -281,6 +291,16 @@ const translations = {
     'search.whereFlying': 'לאן אתם טסים?',
     'search.placeholder': 'לדוגמה: לונדון',
     'search.popularDestinations': 'יעדים פופולריים:',
+
+    // Destination Performance Table
+    'performance.tableTitle': 'ביצועי חברות תעופה ל{city}',
+    'performance.totalFlights': 'סה"כ טיסות',
+    'performance.onTimePct': '% בזמן',
+    'performance.cancelledPct': '% ביטולים',
+    'performance.avgDelay': 'עיכוב ממוצע',
+    'performance.minutes': 'דקות',
+    'performance.noResults': 'לא נמצאו נתונים עבור יעד זה',
+    'performance.selectCity': 'חפשו יעד כדי לראות ביצועי חברות תעופה',
 
     // Flights Table
     'flights.title': 'נתוני טיסות היסטוריים',

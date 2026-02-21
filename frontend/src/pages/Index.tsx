@@ -1,61 +1,57 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { AirlineTable } from "@/components/AirlineTable";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { DatabaseToggle } from "@/components/DatabaseToggle";
 import { DestinationSearch } from "@/components/DestinationSearch";
+import {
+  DestinationPerformanceTable,
+  type AirlinePerformanceRow,
+} from "@/components/DestinationPerformanceTable";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAirlineData, type AirlineBackendKPI } from "@/hooks/useAirlineData";
-import { type AirlineKPI } from "@/lib/mockData.ts";
-import { Plane, BarChart3, Github, Linkedin } from "lucide-react";
+import { Github, Linkedin } from "lucide-react";
 import { API_ENDPOINTS } from "@/config/api";
 
 const Index = () => {
-  const [selectedAirport, setSelectedAirport] = useState("London");
+  const [selectedCity, setSelectedCity] = useState("London");
+  const [selectedCityHe, setSelectedCityHe] = useState<string | null>("לונדון");
+  const [performanceData, setPerformanceData] = useState<AirlinePerformanceRow[]>([]);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { t, isRTL } = useLanguage();
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Build query params — destination only (date range kept at all-time default)
-  const queryString = useMemo(() => {
-    const params = new URLSearchParams();
-    if (selectedAirport && selectedAirport !== "All") {
-      params.append("destination", selectedAirport);
+  // Fetch airline performance whenever selectedCity changes
+  useEffect(() => {
+    if (!selectedCity || selectedCity === "All") {
+      setPerformanceData([]);
+      return;
     }
-    return params.toString();
-  }, [selectedAirport]);
 
-  const AIRLINES_API_ENDPOINT = `${API_ENDPOINTS.AIRLINES_STATS}${queryString ? `?${queryString}` : ""}`;
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-  // Fetch airline performance data
-  const { data: airlineData } = useAirlineData(AIRLINES_API_ENDPOINT);
+    setLoading(true);
 
-  // Convert API response to the AirlineKPI shape used by AirlineTable
-  const convertToMockFormat = (airlines: AirlineBackendKPI[]): AirlineKPI[] => {
-    if (!Array.isArray(airlines) || airlines.length === 0) return [];
-    return airlines
-      .filter((a) => a && a.airline_name)
-      .map((a, i) => ({
-        airline: a.airline_name || `Unknown-${i}`,
-        onTimePercentage: a.on_time_percentage || 0,
-        avgDelayMinutes: a.avg_delay_all_flights ?? a.avg_delay_minutes ?? 0,
-        cancellationPercentage: a.cancellation_percentage || 0,
-        flightCount: a.total_flights || 0,
-        destinations: [],
-      }));
-  };
+    const params = new URLSearchParams({ city: selectedCity });
+    if (selectedCityHe) params.append("city_he", selectedCityHe);
+    const url = `${API_ENDPOINTS.DESTINATION_AIRLINE_PERFORMANCE}?${params.toString()}`;
 
-  const realAirlines = useMemo<AirlineBackendKPI[]>(
-    () => (Array.isArray(airlineData) ? airlineData : []),
-    [airlineData]
-  );
+    fetch(url, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data: { airlines?: AirlinePerformanceRow[] }) => {
+        setPerformanceData(data.airlines ?? []);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") setPerformanceData([]);
+      })
+      .finally(() => setLoading(false));
+  }, [selectedCity, selectedCityHe]);
 
-  const allAirlines: AirlineKPI[] = convertToMockFormat(realAirlines);
-  // Only show airlines with enough flights to be meaningful
-  const filteredAirlines = allAirlines.filter((a) => a.flightCount >= 20);
-
-  const handleDestinationChange = (dest: string) => {
-    setSelectedAirport(dest || "All");
+  const handleDestinationChange = (cityEn: string, cityHe?: string | null) => {
+    setSelectedCity(cityEn || "All");
+    setSelectedCityHe(cityHe ?? null);
   };
 
   return (
@@ -64,32 +60,43 @@ const Index = () => {
         {/* Compact top bar */}
         <div className="flex items-center justify-between py-4 mb-8 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 p-2 bg-gradient-to-r from-primary to-info rounded-lg shadow-[var(--shadow-glow)]">
-              <Plane className="h-5 w-5 text-primary-foreground" />
-              <BarChart3 className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold text-foreground">{t("dashboard.title")}</span>
+            <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
+            <span className="text-2xl font-bold text-foreground">{t("dashboard.title")}</span>
           </div>
           <div className="flex items-center gap-2">
             <DatabaseToggle
               isDatabaseMode={false}
-              onToggle={() => navigate('/flight-board')}
+              onToggle={() => navigate("/flight-board")}
             />
             <LanguageToggle />
             <ThemeToggle />
           </div>
         </div>
 
-        {/* Hero search — the main focus of the page */}
-        <div className="py-8 mb-10">
-          <DestinationSearch value={selectedAirport} onChange={handleDestinationChange} />
+        {/* Subtitle */}
+        <div className="mb-8 text-center space-y-1">
+          <p className="text-sm text-muted-foreground">{t("dashboard.subtitle.line1")}</p>
+          <p className="text-xs text-muted-foreground/70">{t("dashboard.subtitle.line2")}</p>
         </div>
 
-        {/* Airline comparison results */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <AirlineTable data={filteredAirlines} isTop={true} limit={5} />
-          <AirlineTable data={filteredAirlines} isTop={false} limit={5} />
+        {/* Hero search */}
+        <div className="py-8 mb-10">
+          <DestinationSearch value={selectedCity} onChange={handleDestinationChange} />
         </div>
+
+        {/* Airline performance table */}
+        {selectedCity && selectedCity !== "All" ? (
+          <DestinationPerformanceTable
+            city={selectedCity}
+            cityHe={selectedCityHe}
+            data={performanceData}
+            loading={loading}
+          />
+        ) : (
+          <p className="text-center text-sm text-muted-foreground py-12">
+            {t("performance.selectCity")}
+          </p>
+        )}
 
         {/* Credits */}
         <div className="mt-10 pb-8 text-center text-xs text-muted-foreground">
