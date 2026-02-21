@@ -58,21 +58,32 @@ const Index = () => {
     <div className="min-h-screen bg-background" dir={isRTL ? "rtl" : "ltr"}>
       <div className="container mx-auto px-4 max-w-7xl">
         {/* Compact top bar */}
-        <div className="flex items-center justify-between py-4 mb-8 border-b border-border">
-          <div className="flex items-center gap-2">
-            <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
-            <span className="text-2xl font-bold text-foreground">
-              <span className="sm:hidden">RankAir</span>
-              <span className="hidden sm:inline">{t("dashboard.title")}</span>
-            </span>
+        <div className="py-4 mb-8 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
+              <span className="text-2xl font-bold text-foreground">
+                <span className="sm:hidden">RankAir</span>
+                <span className="hidden sm:inline">{t("dashboard.title")}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:block">
+                <DatabaseToggle
+                  isDatabaseMode={false}
+                  onToggle={() => navigate("/flight-board")}
+                />
+              </div>
+              <LanguageToggle />
+              <ThemeToggle />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Flight board button — mobile only, full width below logo row */}
+          <div className="mt-2 sm:hidden">
             <DatabaseToggle
               isDatabaseMode={false}
               onToggle={() => navigate("/flight-board")}
             />
-            <LanguageToggle />
-            <ThemeToggle />
           </div>
         </div>
 

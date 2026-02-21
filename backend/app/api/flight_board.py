@@ -2,10 +2,13 @@
 Flight Board endpoints — SSE stream and filter options for the live board.
 
 Default board behaviour (no date filters supplied):
-  • "Today" is computed in Asia/Jerusalem (Israel Standard / Daylight time).
-  • Only flights whose scheduled_time falls on today's Israel date are shown.
-  • The earliest visible flight is 1 hour before the current Israel time
-    (so recently-departed / recently-arrived flights stay visible briefly).
+  • "windowStart" = now in Asia/Jerusalem − 60 minutes.
+  • "windowEnd"   = scheduled_time of the flight that was most recently updated
+                    in the DB (i.e. the one with the latest scrape_timestamp).
+
+This gives a rolling, self-updating view of live activity: old flights drop off
+the back once they are more than 60 minutes past, and the ceiling advances as
+the ETL ingests fresher data.
 
 When the user supplies date_from / date_to those are treated as Israel-timezone
 day boundaries and fully replace the default window.
@@ -29,8 +32,8 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1/flight-board", tags=["flight-board"])
 
-REFRESH_INTERVAL = 30   # seconds between DB re-queries on an open SSE connection
-HEARTBEAT_INTERVAL = 10  # seconds between SSE keepalive comments
+REFRESH_INTERVAL = 900   # seconds — board re-queries DB every 15 minutes
+HEARTBEAT_INTERVAL = 10  # seconds between SSE keepalive comments (keep connection alive)
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 
@@ -38,17 +41,32 @@ ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _get_latest_window_end(db: Session) -> Optional[datetime]:
+    """
+    Return the scheduled_time of the flight with the most recent scrape_timestamp.
+    This becomes the upper bound of the rolling window for the default board view.
+    Returns None if the table is empty.
+    """
+    result = (
+        db.query(Flight.scheduled_time)
+        .order_by(Flight.scrape_timestamp.desc())
+        .first()
+    )
+    return result.scheduled_time if result else None
+
+
 def _compute_date_window(
     date_from: Optional[date],
     date_to: Optional[date],
-    now_il: Optional[datetime] = None,  # injectable so tests don't need to mock time
+    now_il: Optional[datetime] = None,   # injectable so tests don't need to mock time
+    window_end_dt: Optional[datetime] = None,  # scheduled_time of most-recently-updated flight
 ) -> tuple[Optional[datetime], Optional[datetime]]:
     """
     Return (from_dt, to_dt) as timezone-aware datetimes in Asia/Jerusalem.
 
     No explicit dates supplied (default board view):
-        from_dt = now_il - 1 hour          (1-hour-back cutoff)
-        to_dt   = end of today in Israel   (23:59:59.999999)
+        from_dt = now_il − 1 hour                        (rolling lower bound)
+        to_dt   = window_end_dt (DB-derived upper bound)  or None if table empty
 
     Explicit dates override the default completely.
     Either or both can be None independently.
@@ -57,7 +75,7 @@ def _compute_date_window(
         if now_il is None:
             now_il = datetime.now(tz=ISRAEL_TZ)
         from_dt = now_il - timedelta(hours=1)
-        to_dt = now_il.replace(hour=23, minute=59, second=59, microsecond=999999)
+        to_dt = window_end_dt  # None is fine — query will have no upper bound
         return from_dt, to_dt
 
     from_dt = (
@@ -84,9 +102,11 @@ def _build_query(
     to_dt: Optional[datetime],
     sort_by: str,
     sort_order: str,
-    page: int,
-    size: int,
 ):
+    """
+    Build and execute the flights query.  Returns (rows, total) — all matching
+    rows, no pagination.  Callers are responsible for serialising the results.
+    """
     query = db.query(Flight)
 
     if direction:
@@ -119,15 +139,11 @@ def _build_query(
     }
     primary = sort_map.get(sort_by, Flight.scheduled_time)
     order_fn = primary.desc() if sort_order == "desc" else primary.asc()
-    # Stable secondary sort guarantees consistent page ordering
+    # Stable secondary sort guarantees consistent ordering
     query = query.order_by(order_fn, Flight.flight_number.asc())
 
-    total = query.count()
-    offset = (page - 1) * size
-    rows = query.offset(offset).limit(size).all()
-    total_pages = max(1, (total + size - 1) // size)
-
-    return rows, total, total_pages
+    rows = query.all()
+    return rows, len(rows)
 
 
 def _serialize(flight: Flight) -> dict:
@@ -167,20 +183,20 @@ async def stream_flight_board(
     date_to: Optional[date] = Query(None, description="End date (Israel timezone)"),
     sort_by: str = Query("scheduled_time"),
     sort_order: str = Query("asc"),
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
 ):
     """
     Server-Sent Events stream for the live flight board.
 
-    • On connect: immediately sends current matching flights.
-    • Every REFRESH_INTERVAL seconds: re-queries the DB and pushes an update.
-    • The Israel-time window is re-evaluated on every refresh so the
-      1-hour cutoff slides forward correctly as time passes.
+    • On connect: immediately sends all flights in the current rolling window.
+    • Every REFRESH_INTERVAL seconds (15 min): re-queries the DB and pushes a
+      full update. The Israel-time window is re-evaluated on every refresh.
+    • Every HEARTBEAT_INTERVAL seconds: sends an SSE keepalive comment so that
+      proxies and load-balancers don't close the idle connection.
+    • No pagination — all flights in the window are returned in a single event.
     """
 
     async def event_stream():
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         while True:
             if await request.is_disconnected():
@@ -191,9 +207,12 @@ async def stream_flight_board(
                 def query_db():
                     db = SessionLocal()
                     try:
-                        # Re-compute on every iteration so the cutoff advances with real time
-                        from_dt, to_dt = _compute_date_window(date_from, date_to)
-                        rows, total, total_pages = _build_query(
+                        # Re-compute window on every iteration (cutoff advances with real time)
+                        window_end_dt = _get_latest_window_end(db)
+                        from_dt, to_dt = _compute_date_window(
+                            date_from, date_to, window_end_dt=window_end_dt
+                        )
+                        rows, total = _build_query(
                             db=db,
                             direction=direction,
                             flight_number=flight_number,
@@ -204,26 +223,17 @@ async def stream_flight_board(
                             to_dt=to_dt,
                             sort_by=sort_by,
                             sort_order=sort_order,
-                            page=page,
-                            size=size,
                         )
-                        return [_serialize(r) for r in rows], total, total_pages
+                        return [_serialize(r) for r in rows], total
                     finally:
                         db.close()
 
-                flight_data, total, total_pages = await loop.run_in_executor(None, query_db)
+                flight_data, total = await loop.run_in_executor(None, query_db)
 
                 payload = json.dumps({
                     "type": "flights",
                     "data": flight_data,
-                    "pagination": {
-                        "page": page,
-                        "size": size,
-                        "total": total,
-                        "pages": total_pages,
-                        "has_next": page < total_pages,
-                        "has_prev": page > 1,
-                    },
+                    "total": total,
                     "timestamp": datetime.now(tz=ISRAEL_TZ).isoformat(),
                 })
                 yield f"data: {payload}\n\n"
@@ -232,8 +242,8 @@ async def stream_flight_board(
                 logger.error("SSE stream error", error=str(exc))
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Server error, retrying...'})}\n\n"
 
-            # Sleep REFRESH_INTERVAL total, but send SSE keepalive comments every
-            # HEARTBEAT_INTERVAL seconds so gunicorn workers are not considered idle.
+            # Sleep REFRESH_INTERVAL total, emitting keepalive comments every
+            # HEARTBEAT_INTERVAL seconds so the connection is not dropped as idle.
             elapsed = 0
             while elapsed < REFRESH_INTERVAL:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)

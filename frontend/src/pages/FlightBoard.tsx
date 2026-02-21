@@ -125,14 +125,10 @@ const FlightBoard = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [sortBy, setSortBy] = useState('scheduled_time');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
 
-  // Build SSE params object (memoised via deps)
+  // Build SSE params object
   const sseParams: FlightBoardParams = {
     direction: tab,
-    page,
-    size: PAGE_SIZE,
     sort_by: sortBy,
     sort_order: sortDir,
     flight_number: appliedFilters.flightNumber || undefined,
@@ -143,7 +139,7 @@ const FlightBoard = () => {
     date_to: appliedFilters.dateTo || undefined,
   };
 
-  const { flights, pagination, loading, error, lastUpdated } = useFlightBoardSSE(sseParams, isPaused);
+  const { flights, total, loading, error, lastUpdated } = useFlightBoardSSE(sseParams, isPaused);
 
   // Fetch filter options whenever tab changes
   useEffect(() => {
@@ -158,11 +154,6 @@ const FlightBoard = () => {
       .catch(() => {/* ignore — dropdowns stay empty until backend is reachable */});
   }, [tab]);
 
-  // Reset page on filter/tab/sort change
-  useEffect(() => {
-    setPage(1);
-  }, [tab, appliedFilters, sortBy, sortDir]);
-
   const handleSearch = useCallback(() => {
     setAppliedFilters({ ...draftFilters });
   }, [draftFilters]);
@@ -176,7 +167,6 @@ const FlightBoard = () => {
     setTab(newTab);
     setDraftFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
-    setPage(1);
   };
 
   const handleSort = (field: string) => {
@@ -268,9 +258,7 @@ const FlightBoard = () => {
         {/* ── Page header ── */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-r from-primary to-info rounded-lg shadow-[var(--shadow-glow)]">
-              <Plane className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
             <div>
               <h1 className="text-2xl font-bold text-foreground">{t('board.title')}</h1>
               <p className="text-sm text-muted-foreground mt-0.5">{t('board.airport')}</p>
@@ -282,6 +270,11 @@ const FlightBoard = () => {
             {formattedLastUpdated ? (
               <span className="text-muted-foreground">
                 {t('board.lastUpdated')} <span className="font-mono font-semibold text-foreground">{formattedLastUpdated}</span>
+                {total > 0 && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({total} {tab === 'A' ? t('board.arrivals') : t('board.departures')})
+                  </span>
+                )}
               </span>
             ) : loading ? (
               <span className="text-muted-foreground text-xs">{t('board.connecting')}</span>
@@ -427,11 +420,11 @@ const FlightBoard = () => {
           </div>
         )}
 
-        {/* ── Table ── */}
+        {/* ── Table — all flights, vertically scrollable ── */}
         <div className="rounded-lg border border-border bg-card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-22rem)]">
             <table className="w-full text-sm">
-              <thead className="bg-muted/40 border-b border-border">
+              <thead className="bg-muted/40 border-b border-border sticky top-0 z-10">
                 <tr>
                   <Th field="airline_name">{t('board.col.airline')}</Th>
                   <Th field="flight_number">{t('board.col.flight')}</Th>
@@ -530,54 +523,6 @@ const FlightBoard = () => {
               </tbody>
             </table>
           </div>
-
-          {/* ── Pagination ── */}
-          {pagination && pagination.pages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-              <span className="text-xs text-muted-foreground">
-                {t('board.page')} {pagination.page} {t('board.of')} {pagination.pages}
-                {' '}· {pagination.total.toLocaleString()} {tab === 'A' ? t('board.arrivals') : t('board.departures')}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-3"
-                  disabled={!pagination.has_prev}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  {isRTL ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
-                  <span className="sr-only">{t('board.prev')}</span>
-                </Button>
-
-                {/* Page numbers — show up to 5 around current */}
-                {Array.from({ length: pagination.pages }, (_, i) => i + 1)
-                  .filter((p) => Math.abs(p - pagination.page) <= 2)
-                  .map((p) => (
-                    <Button
-                      key={p}
-                      variant={p === pagination.page ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setPage(p)}
-                    >
-                      {p}
-                    </Button>
-                  ))}
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-3"
-                  disabled={!pagination.has_next}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  {isRTL ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  <span className="sr-only">{t('board.next')}</span>
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
 
       </div>

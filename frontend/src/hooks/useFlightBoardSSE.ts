@@ -20,19 +20,8 @@ export interface FlightRow {
   delay_minutes: number | null;
 }
 
-export interface BoardPagination {
-  page: number;
-  size: number;
-  total: number;
-  pages: number;
-  has_next: boolean;
-  has_prev: boolean;
-}
-
 export interface FlightBoardParams {
   direction: 'A' | 'D';
-  page: number;
-  size: number;
   sort_by: string;
   sort_order: 'asc' | 'desc';
   flight_number?: string;
@@ -45,7 +34,7 @@ export interface FlightBoardParams {
 
 interface UseFlightBoardSSEResult {
   flights: FlightRow[];
-  pagination: BoardPagination | null;
+  total: number;
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -56,7 +45,7 @@ export function useFlightBoardSSE(
   isPaused: boolean,
 ): UseFlightBoardSSEResult {
   const [flights, setFlights] = useState<FlightRow[]>([]);
-  const [pagination, setPagination] = useState<BoardPagination | null>(null);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -72,8 +61,6 @@ export function useFlightBoardSSE(
 
     const qs = new URLSearchParams();
     qs.set('direction', params.direction);
-    qs.set('page', String(params.page));
-    qs.set('size', String(params.size));
     qs.set('sort_by', params.sort_by);
     qs.set('sort_order', params.sort_order);
     if (params.flight_number) qs.set('flight_number', params.flight_number);
@@ -90,15 +77,8 @@ export function useFlightBoardSSE(
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'flights') {
-          // Merge: keep existing rows for unchanged flight_ids, update changed ones
-          setFlights((prev) => {
-            const incoming: FlightRow[] = msg.data;
-            const byId = new Map(prev.map((f) => [f.flight_id, f]));
-            incoming.forEach((f) => byId.set(f.flight_id, f));
-            // Return only the IDs present in the new page (ordered by server)
-            return incoming.map((f) => byId.get(f.flight_id) ?? f);
-          });
-          setPagination(msg.pagination);
+          setFlights(msg.data);
+          setTotal(msg.total ?? msg.data.length);
           setLastUpdated(new Date());
           setLoading(false);
           setError(null);
@@ -122,8 +102,6 @@ export function useFlightBoardSSE(
     };
   }, [
     params.direction,
-    params.page,
-    params.size,
     params.sort_by,
     params.sort_order,
     params.flight_number,
@@ -135,5 +113,5 @@ export function useFlightBoardSSE(
     isPaused,
   ]);
 
-  return { flights, pagination, loading, error, lastUpdated };
+  return { flights, total, loading, error, lastUpdated };
 }
