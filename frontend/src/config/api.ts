@@ -10,4 +10,6 @@ export const API_ENDPOINTS = {
   AIRLINE_DESTINATIONS: (airline: string) => `${API_BASE_URL}/api/v1/airlines/${encodeURIComponent(airline)}/destinations`,
   DESTINATIONS: `${API_BASE_URL}/api/v1/destinations`,
   AIRLINES: `${API_BASE_URL}/api/v1/flights/airlines`,
+  FLIGHT_BOARD_STREAM: `${API_BASE_URL}/api/v1/flight-board/stream`,
+  FLIGHT_BOARD_OPTIONS: `${API_BASE_URL}/api/v1/flight-board/options`,
 };

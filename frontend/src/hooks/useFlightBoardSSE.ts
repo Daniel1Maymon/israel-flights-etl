@@ -1,0 +1,139 @@
+import { useState, useEffect } from 'react';
+import { API_ENDPOINTS } from '@/config/api';
+
+export interface FlightRow {
+  flight_id: string;
+  flight_number: string;
+  airline_code: string;
+  airline_name: string;
+  direction: string;
+  location_iata: string | null;
+  location_en: string | null;
+  location_he: string | null;
+  location_city_en: string | null;
+  country_en: string | null;
+  terminal: string | null;
+  scheduled_time: string | null;
+  actual_time: string | null;
+  status_en: string | null;
+  status_he: string | null;
+  delay_minutes: number | null;
+}
+
+export interface BoardPagination {
+  page: number;
+  size: number;
+  total: number;
+  pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface FlightBoardParams {
+  direction: 'A' | 'D';
+  page: number;
+  size: number;
+  sort_by: string;
+  sort_order: 'asc' | 'desc';
+  flight_number?: string;
+  airline_code?: string;
+  location?: string;
+  terminal?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+interface UseFlightBoardSSEResult {
+  flights: FlightRow[];
+  pagination: BoardPagination | null;
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+}
+
+export function useFlightBoardSSE(
+  params: FlightBoardParams,
+  isPaused: boolean,
+): UseFlightBoardSSEResult {
+  const [flights, setFlights] = useState<FlightRow[]>([]);
+  const [pagination, setPagination] = useState<BoardPagination | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setFlights([]);
+
+    if (isPaused) {
+      setLoading(false);
+      return;
+    }
+
+    const qs = new URLSearchParams();
+    qs.set('direction', params.direction);
+    qs.set('page', String(params.page));
+    qs.set('size', String(params.size));
+    qs.set('sort_by', params.sort_by);
+    qs.set('sort_order', params.sort_order);
+    if (params.flight_number) qs.set('flight_number', params.flight_number);
+    if (params.airline_code) qs.set('airline_code', params.airline_code);
+    if (params.location) qs.set('location', params.location);
+    if (params.terminal) qs.set('terminal', params.terminal);
+    if (params.date_from) qs.set('date_from', params.date_from);
+    if (params.date_to) qs.set('date_to', params.date_to);
+
+    const url = `${API_ENDPOINTS.FLIGHT_BOARD_STREAM}?${qs.toString()}`;
+    const es = new EventSource(url);
+
+    es.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'flights') {
+          // Merge: keep existing rows for unchanged flight_ids, update changed ones
+          setFlights((prev) => {
+            const incoming: FlightRow[] = msg.data;
+            const byId = new Map(prev.map((f) => [f.flight_id, f]));
+            incoming.forEach((f) => byId.set(f.flight_id, f));
+            // Return only the IDs present in the new page (ordered by server)
+            return incoming.map((f) => byId.get(f.flight_id) ?? f);
+          });
+          setPagination(msg.pagination);
+          setLastUpdated(new Date());
+          setLoading(false);
+          setError(null);
+        } else if (msg.type === 'error') {
+          setError(msg.message ?? 'Stream error');
+          setLoading(false);
+        }
+      } catch {
+        setError('Failed to parse server message');
+        setLoading(false);
+      }
+    };
+
+    es.onerror = () => {
+      setError('Connection lost — reconnecting…');
+      setLoading(false);
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [
+    params.direction,
+    params.page,
+    params.size,
+    params.sort_by,
+    params.sort_order,
+    params.flight_number,
+    params.airline_code,
+    params.location,
+    params.terminal,
+    params.date_from,
+    params.date_to,
+    isPaused,
+  ]);
+
+  return { flights, pagination, loading, error, lastUpdated };
+}

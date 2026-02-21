@@ -99,11 +99,11 @@ def setup_argument_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Process all files (default behavior)
+    # Process latest file (default behavior)
     python scripts/manual_download_load.py
 
     # Process all files with specific prefix
-    python scripts/manual_download_load.py --prefix uploads/
+    python scripts/manual_download_load.py --all-files --prefix uploads/
 
     # Process a specific file
     python scripts/manual_download_load.py --s3-key uploads/flights_data_20250919_105215.json
@@ -117,7 +117,7 @@ Examples:
     )
     
     parser.add_argument('--s3-key', default=None, help='Specific S3 key to download (e.g., uploads/flights_data_20250919_105215.json)')
-    parser.add_argument('--no-gzip', action='store_true', default=True, help='Don\'t expect gzipped files (default: True)')
+    parser.add_argument('--no-gzip', action='store_true', default=False, help='Don\'t expect gzipped files')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be done without actually doing it')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
     parser.add_argument('--all-files', action='store_true', help='Process ALL files from S3 instead of just one file')
@@ -148,7 +148,8 @@ def handle_dry_run(args):
         logger.info(f"Would process ALL files from: s3://{S3_BUCKET_NAME}/{args.prefix or S3_RAW_PATH}/")
         logger.info("Would process both .json and .json.gz files")
     else:
-        logger.info(f"Would download from: s3://{S3_BUCKET_NAME}/{args.s3_key}")
+        s3_key = args.s3_key or f"{S3_RAW_PATH}/latest.json.gz"
+        logger.info(f"Would download from: s3://{S3_BUCKET_NAME}/{s3_key}")
         logger.info(f"Would expect gzipped: {not args.no_gzip}")
     logger.info("Would load data into PostgreSQL database")
     logger.info("Would use identifier-based deduplication (flight_id)")
@@ -164,9 +165,13 @@ def process_data(args):
         logger.info("Using download_and_load_all_files() to process all files")
         return download_and_load_all_files(prefix=args.prefix, force=args.force)
     elif args.s3_key is None:
-        # MODE 2: No specific file provided - default to all files mode
-        logger.info("No specific file provided - processing all files by default")
-        return download_and_load_all_files(prefix=args.prefix, force=args.force)
+        # MODE 2: No specific file provided - default to latest file
+        logger.info("No specific file provided - processing latest file by default")
+        return download_and_load_from_s3(
+            s3_key=None,
+            use_gzipped=not args.no_gzip,
+            force=args.force
+        )
     else:
         # MODE 3: Process a specific file that you specify
         # This downloads one specific file from S3 and processes it
