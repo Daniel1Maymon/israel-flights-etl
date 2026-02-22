@@ -16,7 +16,7 @@ const App = () => (
     <LanguageProvider>
       <ThemeProvider
         attribute="class"
-        defaultTheme="dark"
+        defaultTheme="light"
         enableSystem
         disableTransitionOnChange
       >

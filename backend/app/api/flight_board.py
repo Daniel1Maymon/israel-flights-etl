@@ -3,8 +3,7 @@ Flight Board endpoints — SSE stream and filter options for the live board.
 
 Default board behaviour (no date filters supplied):
   • "windowStart" = now in Asia/Jerusalem − 60 minutes.
-  • "windowEnd"   = scheduled_time of the flight that was most recently updated
-                    in the DB (i.e. the one with the latest scrape_timestamp).
+  • "windowEnd"   = the latest scheduled_time across all flights in the DB.
 
 This gives a rolling, self-updating view of live activity: old flights drop off
 the back once they are more than 60 minutes past, and the ceiling advances as
@@ -43,13 +42,13 @@ ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 def _get_latest_window_end(db: Session) -> Optional[datetime]:
     """
-    Return the scheduled_time of the flight with the most recent scrape_timestamp.
+    Return the latest scheduled_time across all flights in the DB.
     This becomes the upper bound of the rolling window for the default board view.
     Returns None if the table is empty.
     """
     result = (
         db.query(Flight.scheduled_time)
-        .order_by(Flight.scrape_timestamp.desc())
+        .order_by(Flight.scheduled_time.desc())
         .first()
     )
     return result.scheduled_time if result else None
