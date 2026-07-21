@@ -171,7 +171,7 @@ async def get_airline_performance(
                         2
                     ) AS on_time_pct,
                     ROUND(
-                        100.0 * SUM(CASE WHEN status_en = 'Cancelled' THEN 1 ELSE 0 END) / COUNT(*),
+                        100.0 * SUM(CASE WHEN status_en = 'CANCELED' THEN 1 ELSE 0 END) / COUNT(*),
                         2
                     ) AS cancelled_pct,
                     ROUND(
