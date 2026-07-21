@@ -143,6 +143,7 @@ async def search_cities(
 async def get_airline_performance(
     city: str = Query(..., description="City name in English (used as fallback)"),
     city_he: Optional[str] = Query(None, description="Canonical Hebrew city word for comprehensive airport matching"),
+    min_flights: int = Query(10, ge=1, description="Minimum flights an airline must have to appear (filters out statistically meaningless samples)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -160,6 +161,8 @@ async def get_airline_performance(
         else:
             where_sql = "location_city_en ILIKE :pattern AND direction = 'D'"
             params = {"pattern": f"%{city}%"}
+
+        params["min_flights"] = min_flights
 
         rows = db.execute(
             text(f"""
@@ -181,6 +184,7 @@ async def get_airline_performance(
                 FROM flights
                 WHERE {where_sql}
                 GROUP BY airline_name
+                HAVING COUNT(*) >= :min_flights
                 ORDER BY on_time_pct DESC
             """),
             params,
