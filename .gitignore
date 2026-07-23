@@ -245,6 +245,7 @@ airflow/create_connections.py
 debug_*.py
 test_*.py
 !etl/tests/test_*.py
+!backend/tests/test_*.py
 verify_*.py
 compare_*.py
 investigate_*.py
@@ -264,3 +265,9 @@ flights_data_*.json
 # Log files
 *.log
 logs/
+
+# Planning / working notes (local only)
+.planning/
+
+# Local DB dump (never commit)
+/backup.sql

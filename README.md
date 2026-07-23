@@ -1,175 +1,145 @@
 # Israel Flights ETL System
 
-A comprehensive end-to-end data pipeline for processing and visualizing Israeli flight data with advanced analytics, real-time filtering, and production-ready features.
+End-to-end pipeline for Israeli flight data:
+- Fetches from `data.gov.il` CKAN API
+- Transforms + upserts into PostgreSQL
+- Serves data via FastAPI
+- Visualizes in a React dashboard
 
-## 🚀 Quick Start
+## Current Architecture
 
-### Prerequisites
-- Docker and Docker Compose
-- Python 3.8+ (for local development)
-- Node.js 16+ (for frontend development)
+Data flow:
 
-### Running the Complete System
+`CKAN API -> ETL (APScheduler, every 15 min) -> PostgreSQL -> FastAPI -> React`
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd israel-flights-etl
-   ```
+Main components:
+- `etl/`: Lightweight scheduler + ETL logic (`python -m etl.main`)
+- `backend/`: FastAPI API (`/docs`, `/health`, `/ready`)
+- `frontend/`: Vite + React dashboard
+- `airflow/`: Legacy/alternate orchestration assets (not required for the current default runtime)
 
-2. **Start all services with Docker Compose:**
-   ```bash
-   # Start all backend services (ETL + Database + API)
-   docker compose up -d --build
+## AI Search
 
-   # Or for production deployment
-   docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --build
-   ```
+Ask a plain-language question — *"which airline should I fly to Paris and why?"* — and get an
+answer computed from the live flight data (Hebrew or English). Single-shot, provider-agnostic LLM,
+and security-first: the model never touches the database directly.
 
-3. **Access the applications:**
-   - **Frontend Dashboard**: Deployed on Vercel (see deployment section)
-   - **Backend API**: http://localhost:8000
-   - **API Documentation**: http://localhost:8000/docs
+Flow: `question → guards (monthly budget · per-user daily cap) → interpret (LLM → structured intent)
+→ reviewed query handler, or a guarded LLM-written SQL fallback → read-only DB → format → answer`.
 
-## 📁 Project Structure
+Two independent safety walls sit under the LLM:
+- a **read-only DB role** (`SELECT` on `flights` only, 2s timeout) — writes, drops, and other
+  tables are denied by Postgres itself;
+- an **AST SQL validator** for the fallback (single `SELECT`, whitelisted tables, forced `LIMIT`) —
+  not fragile regex.
 
+Common questions never use LLM-written SQL — they run reviewed query handlers with bound
+parameters, so answers are correct and injection is impossible. Switch model/provider with env
+vars (`LLM_PROVIDER`, `LLM_MODEL`) — no code change.
+
+Endpoint: `POST /api/v1/ai-search`. Full details: [docs/AI_SEARCH.md](docs/AI_SEARCH.md).
+
+## Quick Start
+
+Prerequisites:
+- Docker + Docker Compose
+- Python 3.11+ (local development)
+- Node.js 20+ (frontend development)
+
+### Option A: Full local stack (with local PostgreSQL)
+
+Use the production compose file (it includes Postgres):
+
+```bash
+cp .env.prod.example .env.prod
+docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --build
 ```
-israel-flights-etl/
-├── docs/                       # 📚 All documentation
-├── etl/                        # 🔄 ETL Pipeline (Lightweight Python Scheduler)
-├── backend/                    # 🚀 FastAPI Backend
-├── frontend/                   # 🎨 React Frontend (deployed on Vercel)
-├── data/                       # 📊 Data storage
-└── DEPLOYMENT.md               # 📖 Deployment guide
+
+Access:
+- Backend API: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+
+### Option B: Railway-style services locally
+
+`docker-compose.yml` is aligned for Railway-like setup and expects an external managed database via `DATABASE_URL` (Postgres service is intentionally commented out there).
+
+## Local Development
+
+### Backend
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 🏗️ Architecture Overview
+### Frontend
 
-**Data Flow**: CKAN API → ETL Runner (scheduled) → PostgreSQL (clean) → FastAPI (serve) → React (visualize)
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-### Key Components
+Environment variable:
+- `VITE_API_URL` (defaults to `http://localhost:8000`)
 
-- **ETL Pipeline**: Automated data extraction, transformation, and loading every 15 minutes using a lightweight Python scheduler
-- **Backend API**: 15+ RESTful endpoints with advanced filtering and analytics
-- **Frontend Dashboard**: Interactive React dashboard deployed on Vercel
-- **Analytics Engine**: Sophisticated airline performance KPIs and data quality assessment
+### ETL
 
-## 📚 Documentation
+```bash
+cd etl
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python -m etl.main
+```
 
-All project documentation is organized in the [`docs/`](docs/) folder:
+## API Surface (High Level)
 
-- **[Project Guide](docs/guides/PROJECT_GUIDE.md)** - Complete end-to-end guide (setup, run, troubleshooting)
-- **[Services Summary](docs/services/SERVICES_SUMMARY.md)** - What each service does and how it's used
-- **[System Architecture](docs/architecture/BACKEND_SYSTEM_DESIGN.md)** - Detailed architecture and design
-- **[Backend API Spec](docs/api/BACKEND_SPECIFICATION.md)** - API endpoints and behavior
-- **[Field Mapping](docs/reference/FIELD_MAPPING_TABLE.md)** - Source→target field mapping
-- **[EC2 Deployment](DEPLOYMENT.md)** - Deploy on a VM with Docker Compose
+- `GET /health`, `GET /ready`, `GET /metrics`
+- `GET /api/v1/flights/*` (list/filter/pagination)
+- `GET /api/v1/airlines/*` (aggregations, top/bottom, destinations)
+- `GET /api/v1/destinations/*` (search, city autocomplete, airline performance by city)
+- `GET /api/v1/flight-board/stream` (SSE live board)
+- `GET /api/v1/flight-board/options` (flight-board filter values)
+- `POST /api/v1/ai-search` (natural-language question → grounded answer; see [docs/AI_SEARCH.md](docs/AI_SEARCH.md))
 
-## ✨ Features
+## Testing
 
-### ETL Pipeline
-- **Automated Data Extraction** from Israel's official flight data API
-- **Lightweight Scheduler** using APScheduler (no Airflow overhead)
-- **Data Validation** and quality checks at each stage
-- **PostgreSQL Integration** with upsert logic for data consistency
-- **Configurable Schedule** (default: every 15 minutes)
+Backend tests:
 
-### Backend API
-- **15+ RESTful Endpoints** for comprehensive data access
-- **Advanced Filtering** by airline, destination, date, status, and more
-- **Real-time Analytics** with airline performance KPIs
-- **Production-Ready** with logging, error handling, and health checks
+```bash
+cd backend
+pytest
+```
 
-### Frontend Dashboard
-- **Interactive Data Visualization** with real-time updates
-- **Multi-language Support** (Hebrew/English)
-- **Theme Switching** (Light/Dark mode)
-- **Advanced Filtering** and search capabilities
-- **Responsive Design** for all device sizes
-- **Deployed on Vercel** for optimal CDN performance
+More details:
+- `backend/tests/README.md`
+- `backend/tests/HOW_TESTING_WORKS.md`
 
-## 🛠️ Development
+Frontend quality checks:
 
-### Local Development Setup
+```bash
+cd frontend
+npm run lint
+npm run build
+```
 
-1. **Backend Development:**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   python -m app.main
-   ```
+## Deployment
 
-2. **Frontend Development:**
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+- Railway + Vercel quick path: [QUICK_DEPLOY.md](QUICK_DEPLOY.md)
+- EC2 + Docker Compose path: [DEPLOYMENT.md](DEPLOYMENT.md)
 
-3. **ETL Pipeline Development:**
-   ```bash
-   cd etl
-   # Install dependencies
-   pip install -r requirements.txt
-   # Run ETL manually
-   python -m etl.main
-   ```
+## Docs
 
-### Testing
+Start here:
+- [docs/INDEX.md](docs/INDEX.md)
+- [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
+- [docs/guides/PROJECT_GUIDE.md](docs/guides/PROJECT_GUIDE.md)
+- [docs/AI_SEARCH.md](docs/AI_SEARCH.md) — AI Search architecture & how it works
 
-- **Backend Tests**: `cd backend && python test_basic.py`
-- **Frontend Tests**: `cd frontend && npm test`
-- **API Testing**: Visit http://localhost:8000/docs for interactive testing
+## License
 
-## 🚀 Deployment
-
-### Production Deployment
-
-The system is designed for cloud deployment with:
-- **Backend & Database**: Docker Compose on EC2
-- **Frontend**: Vercel (automatic deployments from Git)
-- **ETL Runner**: Docker container with APScheduler on EC2
-- **Database**: PostgreSQL with persistent volumes
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
-
-### Deployment Architecture
-
-- **Frontend**: Deployed on Vercel
-  - Automatic builds from Git pushes
-  - Global CDN distribution
-  - Environment variable configuration via Vercel dashboard
-
-- **Backend**: Deployed on EC2 with Docker Compose
-  - PostgreSQL database
-  - FastAPI backend
-  - Lightweight ETL runner with APScheduler
-
-## 📊 Data Sources
-
-- **Primary Source**: [Israel Open Data Portal](https://data.gov.il) - Flight data API
-- **Data Format**: JSON with 1000+ records per batch
-- **Update Frequency**: Every 15 minutes via scheduled ETL runner
-- **Data Quality**: Automated validation and completeness checks
-
-## 🤝 Contributing
-
-1. Start with [docs/guides/PROJECT_GUIDE.md](docs/guides/PROJECT_GUIDE.md)
-2. Follow the architecture patterns in [docs/architecture/BACKEND_SYSTEM_DESIGN.md](docs/architecture/BACKEND_SYSTEM_DESIGN.md)
-
-## 📄 License
-
-This project is licensed under the terms specified in [docs/LICENSE](docs/LICENSE).
-
-## 🆘 Support
-
-For questions and issues:
-1. Start with [docs/guides/PROJECT_GUIDE.md](docs/guides/PROJECT_GUIDE.md)
-2. Review [troubleshooting guides](docs/architecture/BACKEND_SYSTEM_DESIGN.md#troubleshooting)
-3. Check application logs and health endpoints
-
----
-
-**Built with ❤️ for the Israeli aviation community**
+[docs/legal/LICENSE](docs/legal/LICENSE)

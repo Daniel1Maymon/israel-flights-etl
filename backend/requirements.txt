@@ -37,3 +37,7 @@ redis==5.0.1
 
 # Environment management
 python-dotenv==1.0.0
+
+# AI search (natural-language query feature)
+sqlglot==30.13.0
+google-genai==2.14.0

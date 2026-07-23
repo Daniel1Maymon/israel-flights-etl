@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { DatabaseToggle } from "@/components/DatabaseToggle";
 import { DestinationSearch } from "@/components/DestinationSearch";
+import { AISearch } from "@/components/AISearch";
 import {
   DestinationPerformanceTable,
   type AirlinePerformanceRow,
@@ -94,8 +95,13 @@ const Index = () => {
         </div>
 
         {/* Hero search */}
-        <div className="py-8 mb-10">
+        <div className="py-8 mb-6">
           <DestinationSearch value={selectedCity} onChange={handleDestinationChange} />
+        </div>
+
+        {/* AI natural-language search */}
+        <div className="mb-10">
+          <AISearch />
         </div>
 
         {/* Airline performance table */}

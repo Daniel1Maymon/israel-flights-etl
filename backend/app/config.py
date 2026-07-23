@@ -101,7 +101,18 @@ class Settings(BaseSettings):
     workers: int = 1
     max_connections: int = 100
     keep_alive_timeout: int = 5
-    
+
+    # AI search (natural-language query feature) — provider-agnostic LLM layer
+    llm_provider: str = "gemini"                   # LLM_PROVIDER: gemini | openai
+    llm_model: str = "gemini-2.5-flash"            # LLM_MODEL: any model id for the chosen provider
+    gemini_api_key: str = ""                        # GEMINI_API_KEY
+    openai_api_key: str = ""                        # OPENAI_API_KEY
+    database_url_ro: str = ""                       # DATABASE_URL_RO — read-only rankair_ro role
+    ai_daily_limit_per_user: int = 20               # questions per user per day
+    ai_monthly_budget_tokens: int = 20_000_000      # global monthly token ceiling (~$6-8 Flash)
+    ai_max_question_chars: int = 500                # reject longer questions pre-call
+    ai_max_rows: int = 50                           # forced LIMIT on all AI queries
+
     class Config:
         env_file = ".env"
         case_sensitive = False
