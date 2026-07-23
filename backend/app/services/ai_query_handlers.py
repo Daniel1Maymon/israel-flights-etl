@@ -66,9 +66,12 @@ def _limit(intent: dict) -> int:
 
 
 def _dest_clause(destination: str, params: dict) -> str:
-    """Match a destination city across Hebrew + English forms (all airports of a city)."""
+    """Match a destination across city (HE+EN) and country, so 'London' or 'Greece' both work."""
     params["dest"] = f"%{destination.strip()}%"
-    return "(location_he ILIKE :dest OR location_city_en ILIKE :dest OR location_en ILIKE :dest)"
+    return (
+        "(location_he ILIKE :dest OR location_city_en ILIKE :dest "
+        "OR location_en ILIKE :dest OR country_en ILIKE :dest)"
+    )
 
 
 def _run(sql: str, params: dict) -> tuple[list[str], list[dict]]:

@@ -25,8 +25,9 @@ _INTERPRET_SYS = (
     "Intents: rank_airlines (rank airlines to a destination or overall), single_airline (one "
     "airline's reliability), head_to_head (compare two airlines), by_destination (one airline "
     "across destinations), overall (all airlines, no destination), by_region (a region such as "
-    "Europe), or other. metric is on_time, cancel, or delay. Extract destination (city, EN or HE) "
-    "and up to two airline names as written, and region if present. "
+    "Europe), or other. metric is on_time, cancel, or delay. Extract destination as its ENGLISH "
+    "name (translate Hebrew city/country names to English, e.g. 'ליוון'->'Greece', "
+    "'ללונדון'->'London'), up to two airline names as written, and region if present. "
     "For ranking intents set limit to 10 unless the user asks for a specific number."
 )
 
@@ -46,7 +47,15 @@ def _sql_sys() -> str:
         "delay_minutes, status_en, terminal. Rules: SELECT only (no INSERT/UPDATE/DELETE/DDL); "
         f"always add LIMIT <= {settings.ai_max_rows}; departures use direction='D'; cancellations "
         "use status_en ILIKE 'CANCELED'; on-time means delay_minutes <= 15; exclude tiny samples "
-        "with HAVING COUNT(*) >= 10; match a city via location_he or location_city_en ILIKE. "
+        "with HAVING COUNT(*) >= 10. "
+        "Place names: country_en, location_city_en and location_en are in ENGLISH; location_he is "
+        "in HEBREW. For a COUNTRY (e.g. Greece, France) filter country_en with the ENGLISH name "
+        "(country_en ILIKE '%greece%'); for a CITY match location_he (Hebrew) OR location_city_en "
+        "(English). Translate any Hebrew place name in the question to English before matching "
+        "country_en/location_city_en. "
+        "ROUND every average and percentage to 1 decimal, e.g. ROUND(AVG(delay_minutes), 1). "
+        "When applicable, alias output columns as: airline_name, total_flights, on_time_pct, "
+        "cancel_pct, avg_delay_minutes, destination. "
         "Output ONLY the SQL — no markdown fences, no explanation."
     )
 

@@ -74,8 +74,36 @@ export const AISearch = () => {
     return isHe ? r.he : r.en;
   };
 
-  const fmt = (v: unknown) =>
-    typeof v === "number" ? Number.isInteger(v) ? v : v.toFixed(1) : String(v ?? "—");
+  const COLUMN_LABELS: Record<string, { en: string; he: string }> = {
+    airline_name: { en: "Airline", he: "חברת תעופה" },
+    total_flights: { en: "Total flights", he: 'סה"כ טיסות' },
+    num_flights: { en: "Flights", he: "מספר טיסות" },
+    flights: { en: "Flights", he: "טיסות" },
+    on_time_pct: { en: "On-time %", he: "% בזמן" },
+    cancel_pct: { en: "Cancelled %", he: "% ביטולים" },
+    cancelled_pct: { en: "Cancelled %", he: "% ביטולים" },
+    avg_delay_minutes: { en: "Avg delay (min)", he: "עיכוב ממוצע (דק')" },
+    avg_delay: { en: "Avg delay (min)", he: "עיכוב ממוצע (דק')" },
+    severe_delay_pct: { en: "Severe delay %", he: "% עיכוב חמור" },
+    destination: { en: "Destination", he: "יעד" },
+    location_city_en: { en: "Destination", he: "יעד" },
+    country_en: { en: "Country", he: "מדינה" },
+    terminal: { en: "Terminal", he: "טרמינל" },
+  };
+
+  const label = (c: string) => {
+    const m = COLUMN_LABELS[c.toLowerCase()];
+    if (m) return isHe ? m.he : m.en;
+    return c.replace(/_/g, " ");
+  };
+
+  const fmt = (v: unknown) => {
+    if (v === null || v === undefined) return "—";
+    // numbers OR numeric strings (Postgres returns NUMERIC as a string) → round to 1 decimal
+    const n = typeof v === "number" ? v : /^-?\d+(\.\d+)?$/.test(String(v).trim()) ? Number(v) : NaN;
+    if (Number.isNaN(n)) return String(v);
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+  };
 
   return (
     <div className="w-full max-w-3xl mx-auto" dir={isHe ? "rtl" : "ltr"}>
@@ -124,7 +152,7 @@ export const AISearch = () => {
                   <tr>
                     {result.columns.map((c) => (
                       <th key={c} className="px-3 py-2 text-start font-medium whitespace-nowrap">
-                        {c.replace(/_/g, " ")}
+                        {label(c)}
                       </th>
                     ))}
                   </tr>
