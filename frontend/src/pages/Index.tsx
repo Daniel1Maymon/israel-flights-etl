@@ -105,8 +105,8 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Overview stats (departures) */}
-        <div className="mb-4 max-w-md mx-auto">
+        {/* Overview stats */}
+        <div className="mb-4 max-w-3xl mx-auto">
           <StatsBar />
         </div>
 

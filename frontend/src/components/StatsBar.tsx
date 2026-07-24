@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Plane, Building2, MapPin } from "lucide-react";
+import { Plane, PlaneTakeoff, PlaneLanding, Building2, MapPin } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { API_ENDPOINTS } from "@/config/api";
 
 interface StatsOverview {
-  flights: number;
+  departures: number;
+  arrivals: number;
+  total: number;
   airlines: number;
   destinations: number;
 }
@@ -42,14 +44,20 @@ export const StatsBar = () => {
   const fmt = (n: number | undefined) =>
     n === undefined ? "—" : n.toLocaleString(locale);
 
+  // Logical order; the grid follows the page direction, so this reads
+  // left-to-right in English and right-to-left in Hebrew.
+  // NB: avoid the `grid-cols-2` class here — a global RTL rule in index.css
+  // reorders first/last children of any `.grid-cols-2`, which scrambles the bar.
   const items = [
-    { icon: Plane, value: stats?.flights, label: t("stats.flights") },
+    { icon: PlaneTakeoff, value: stats?.departures, label: t("stats.departures") },
+    { icon: PlaneLanding, value: stats?.arrivals, label: t("stats.arrivals") },
+    { icon: Plane, value: stats?.total, label: t("stats.total") },
     { icon: Building2, value: stats?.airlines, label: t("stats.airlines") },
     { icon: MapPin, value: stats?.destinations, label: t("stats.destinations") },
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
       {items.map(({ icon: Icon, value, label }) => (
         <div
           key={label}

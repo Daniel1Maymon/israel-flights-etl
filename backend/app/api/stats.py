@@ -20,32 +20,43 @@ router = APIRouter(prefix="/api/v1", tags=["stats"])
 )
 async def get_stats_overview(db: Session = Depends(get_db)):
     """
-    Return live counts for departure flights only (direction = 'D'):
-    - flights: total departure flight rows
-    - airlines: distinct airlines operating departures
-    - destinations: distinct destination cities
+    Return live counts computed from the database on each request, so they
+    reflect the latest ETL updates.
 
-    Values are computed from the database on each request, so they reflect
-    the latest ETL updates.
+    Flight counts:
+    - departures: rows with direction = 'D'
+    - arrivals:   rows with direction = 'A'
+    - flights:    all rows (total in the system)
+
+    Airlines / destinations are scoped to departures (the dashboard's focus):
+    - airlines:     distinct airlines operating departures
+    - destinations: distinct departure destination cities
+
+    'flights' stays as the departures count for backwards compatibility with the
+    original bar; 'departures' is its explicit alias.
     """
     try:
         row = db.execute(
             text("""
                 SELECT
-                    COUNT(*) AS flights,
+                    COUNT(*) FILTER (WHERE direction = 'D') AS departures,
+                    COUNT(*) FILTER (WHERE direction = 'A') AS arrivals,
+                    COUNT(*) AS total,
                     COUNT(DISTINCT airline_name) FILTER (
-                        WHERE airline_name IS NOT NULL AND TRIM(airline_name) != ''
+                        WHERE direction = 'D' AND airline_name IS NOT NULL AND TRIM(airline_name) != ''
                     ) AS airlines,
                     COUNT(DISTINCT location_city_en) FILTER (
-                        WHERE location_city_en IS NOT NULL AND TRIM(location_city_en) != ''
+                        WHERE direction = 'D' AND location_city_en IS NOT NULL AND TRIM(location_city_en) != ''
                     ) AS destinations
                 FROM flights
-                WHERE direction = 'D'
             """)
         ).fetchone()
 
         return {
-            "flights": int(row.flights or 0),
+            "departures": int(row.departures or 0),
+            "arrivals": int(row.arrivals or 0),
+            "total": int(row.total or 0),
+            "flights": int(row.departures or 0),  # backwards-compat alias
             "airlines": int(row.airlines or 0),
             "destinations": int(row.destinations or 0),
         }

@@ -132,6 +132,9 @@ const translations = {
 
     // Overview stats
     'stats.flights': 'Flights',
+    'stats.departures': 'Departures',
+    'stats.arrivals': 'Arrivals',
+    'stats.total': 'Total Flights',
     'stats.airlines': 'Airlines',
     'stats.destinations': 'Destinations',
 
@@ -311,6 +314,9 @@ const translations = {
 
     // Overview stats
     'stats.flights': 'טיסות',
+    'stats.departures': 'המראות',
+    'stats.arrivals': 'נחיתות',
+    'stats.total': 'סה"כ טיסות',
     'stats.airlines': 'חברות תעופה',
     'stats.destinations': 'יעדים',
 
