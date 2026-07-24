@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     ai_max_question_chars: int = 500                # reject longer questions pre-call
     ai_max_rows: int = 50                           # forced LIMIT on all AI queries
 
+    # Admin analytics dashboard — Bearer token guarding GET /api/v1/admin/*.
+    # Fail-closed: if unset, all admin endpoints return 401.
+    admin_token: str = ""                           # ADMIN_TOKEN
+
     class Config:
         env_file = ".env"
         case_sensitive = False

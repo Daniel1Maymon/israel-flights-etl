@@ -9,6 +9,7 @@ from app.api.airline_endpoints import router as airline_router
 from app.api.destinations import router as destinations_router
 from app.api.flight_board import router as flight_board_router
 from app.api.ai_search import router as ai_search_router
+from app.api.admin import router as admin_router
 
 # Create main API router
 api_router = APIRouter()
@@ -20,3 +21,4 @@ api_router.include_router(airline_router)
 api_router.include_router(destinations_router)
 api_router.include_router(flight_board_router)
 api_router.include_router(ai_search_router)
+api_router.include_router(admin_router)
