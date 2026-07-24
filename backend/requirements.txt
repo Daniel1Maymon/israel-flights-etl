@@ -11,7 +11,7 @@ psycopg2-binary>=2.9.0
 alembic>=1.13.1
 
 # HTTP client
-httpx==0.25.2
+httpx==0.28.1  # >=0.28.1 required by google-genai
 requests==2.31.0
 
 # CORS and middleware
@@ -21,7 +21,6 @@ python-multipart==0.0.6
 pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
-httpx==0.25.2
 
 # Production dependencies
 gunicorn==21.2.0
