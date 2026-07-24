@@ -29,13 +29,30 @@ interface Props {
   cityHe?: string | null;
   data: AirlinePerformanceRow[];
   loading?: boolean;
+  /** Overrides the "airline performance for {city}" heading (e.g. the default leaderboard). */
+  title?: string;
+  /** Initial column to sort by. Defaults to average delay (ascending). */
+  initialSortField?: SortField;
+  initialSortDir?: SortDir;
+  /** If set, only the first N rows are shown AFTER sorting the full data set.
+   *  Sorting therefore always ranks the whole data set, not just the visible rows. */
+  displayLimit?: number;
 }
 
-export const DestinationPerformanceTable = ({ city, cityHe, data, loading }: Props) => {
+export const DestinationPerformanceTable = ({
+  city,
+  cityHe,
+  data,
+  loading,
+  title: titleOverride,
+  initialSortField = "avg_delay_minutes_positive_only",
+  initialSortDir = "asc",
+  displayLimit,
+}: Props) => {
   const { t, language } = useLanguage();
 
-  const [sortField, setSortField] = useState<SortField>("avg_delay_minutes_positive_only");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortField, setSortField] = useState<SortField>(initialSortField);
+  const [sortDir, setSortDir] = useState<SortDir>(initialSortDir);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -58,6 +75,10 @@ export const DestinationPerformanceTable = ({ city, cityHe, data, loading }: Pro
       ? (aVal as number) - (bVal as number)
       : (bVal as number) - (aVal as number);
   });
+
+  // Sort the FULL data set first, then keep only the visible rows. This makes a
+  // column sort rank the entire data set, never just the currently-shown rows.
+  const visible = displayLimit != null ? sorted.slice(0, displayLimit) : sorted;
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (field !== sortField) return <ArrowUpDown className="h-3.5 w-3.5" />;
@@ -94,7 +115,7 @@ export const DestinationPerformanceTable = ({ city, cityHe, data, loading }: Pro
   };
 
   const displayCity = language === "he" && cityHe ? cityHe : city;
-  const title = t("performance.tableTitle").replace("{city}", displayCity);
+  const title = titleOverride ?? t("performance.tableTitle").replace("{city}", displayCity);
 
   return (
     <Card className="bg-gradient-to-br from-card to-secondary/50 border border-border/50 shadow-[var(--shadow-card)]">
@@ -142,7 +163,7 @@ export const DestinationPerformanceTable = ({ city, cityHe, data, loading }: Pro
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sorted.map((row, i) => (
+                {visible.map((row, i) => (
                   <TableRow
                     key={`${row.airline_name}-${i}`}
                     className="border-border/30 hover:bg-muted/30 transition-colors"

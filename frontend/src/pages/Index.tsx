@@ -5,6 +5,7 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { DatabaseToggle } from "@/components/DatabaseToggle";
 import { DestinationSearch } from "@/components/DestinationSearch";
 import { AISearch } from "@/components/AISearch";
+import { StatsBar } from "@/components/StatsBar";
 import {
   DestinationPerformanceTable,
   type AirlinePerformanceRow,
@@ -14,13 +15,29 @@ import { Github, Linkedin } from "lucide-react";
 import { API_ENDPOINTS } from "@/config/api";
 
 const Index = () => {
-  const [selectedCity, setSelectedCity] = useState("London");
-  const [selectedCityHe, setSelectedCityHe] = useState<string | null>("לונדון");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [selectedCityHe, setSelectedCityHe] = useState<string | null>(null);
   const [performanceData, setPerformanceData] = useState<AirlinePerformanceRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [topAirlines, setTopAirlines] = useState<AirlinePerformanceRow[]>([]);
+  const [topLoading, setTopLoading] = useState(true);
   const navigate = useNavigate();
   const { t, isRTL } = useLanguage();
   const abortRef = useRef<AbortController | null>(null);
+
+  // Default leaderboard: fetch the FULL qualifying set (all airlines with >= 50
+  // departures) so client-side column sorting ranks the whole DB; only the top 10
+  // are displayed (see displayLimit on the table).
+  useEffect(() => {
+    const params = new URLSearchParams({ limit: "500", min_flights: "50" });
+    fetch(`${API_ENDPOINTS.AIRLINES_TOP_ON_TIME}?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data: { airlines?: AirlinePerformanceRow[] }) => {
+        setTopAirlines(data.airlines ?? []);
+      })
+      .catch(() => setTopAirlines([]))
+      .finally(() => setTopLoading(false));
+  }, []);
 
   // Fetch airline performance whenever selectedCity changes
   useEffect(() => {
@@ -59,7 +76,7 @@ const Index = () => {
     <div className="min-h-screen bg-background" dir={isRTL ? "rtl" : "ltr"}>
       <div className="container mx-auto px-4 max-w-7xl">
         {/* Compact top bar */}
-        <div className="py-4 mb-8 border-b border-border">
+        <div className="py-4 mb-4 border-b border-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
@@ -88,6 +105,11 @@ const Index = () => {
           </div>
         </div>
 
+        {/* Overview stats (departures) */}
+        <div className="mb-4 max-w-md mx-auto">
+          <StatsBar />
+        </div>
+
         {/* Subtitle */}
         <div className="mb-8 text-center space-y-1">
           <p className="text-lg text-muted-foreground">{t("dashboard.subtitle.line1")}</p>
@@ -104,7 +126,8 @@ const Index = () => {
           <AISearch />
         </div>
 
-        {/* Airline performance table */}
+        {/* Airline performance table — city results when a city is chosen,
+            otherwise the default Top-10-by-on-time leaderboard. */}
         {selectedCity && selectedCity !== "All" ? (
           <DestinationPerformanceTable
             city={selectedCity}
@@ -113,9 +136,15 @@ const Index = () => {
             loading={loading}
           />
         ) : (
-          <p className="text-center text-sm text-muted-foreground py-12">
-            {t("performance.selectCity")}
-          </p>
+          <DestinationPerformanceTable
+            city=""
+            data={topAirlines}
+            loading={topLoading}
+            title={t("performance.topTableTitle")}
+            initialSortField="on_time_pct"
+            initialSortDir="desc"
+            displayLimit={10}
+          />
         )}
 
         {/* Credits */}

@@ -123,17 +123,13 @@ export const DestinationSearch = ({ value, onChange }: DestinationSearchProps) =
 
   return (
     <div className="w-full max-w-2xl mx-auto text-center">
-      <label className="block text-3xl font-semibold text-foreground mb-6">
-        {t("search.whereFlying")}
-      </label>
-
       <div className="relative" ref={ref}>
         <Search className="absolute start-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-10" />
         <input
           type="text"
           dir="ltr"
           value={query}
-          placeholder={t("search.placeholder")}
+          placeholder={t("search.whereFlying")}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);

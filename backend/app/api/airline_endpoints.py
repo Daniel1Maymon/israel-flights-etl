@@ -14,13 +14,14 @@ Key Concepts for Junior Data Engineers:
 from typing import Optional, List
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, case
+from sqlalchemy import func, case, text
 from sqlalchemy.orm import Session
 import structlog
 
 from app.api.deps import get_database
 from app.models.flight import Flight
 from app.services.airline_aggregation import AirlineAggregationService
+from app.services.flight_status import CANCELLED_SQL, NOT_CANCELLED_SQL
 from app.schemas.airline import (
     AirlineStatsResponse,
     AirlineTopBottomResponse,
@@ -116,6 +117,80 @@ async def get_airline_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve airline statistics"
         )
+
+
+@router.get(
+    "/top-on-time",
+    summary="Top airlines by on-time performance (all departures)",
+    description="Leaderboard of the best on-time airlines across all departure destinations",
+)
+async def get_top_on_time_airlines(
+    limit: int = Query(500, ge=1, le=1000, description="Max airlines to return; the frontend fetches the full qualifying set so it can re-sort by any metric across the whole DB, not just the visible top 10"),
+    min_flights: int = Query(
+        50, ge=1,
+        description="Minimum departure flights an airline needs to qualify (filters out tiny, statistically meaningless samples)",
+    ),
+    db: Session = Depends(get_database),
+):
+    """
+    Same metric definitions as the per-destination performance table
+    (delay <= 15 = on time, canonical cancellation detection), but aggregated
+    across ALL departure destinations and grouped by airline.
+
+    Returns the FULL set of qualifying airlines (default ordered by on-time %)
+    so the frontend can re-sort by any column over the whole database and then
+    display just the top N. Returns the same row shape as
+    /destinations/airline-performance so the frontend reuses the same table.
+    """
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    airline_name,
+                    COUNT(*) AS total_flights,
+                    ROUND(
+                        100.0 * SUM(CASE WHEN {NOT_CANCELLED_SQL} AND delay_minutes <= 15 THEN 1 ELSE 0 END) / COUNT(*),
+                        2
+                    ) AS on_time_pct,
+                    ROUND(
+                        100.0 * SUM(CASE WHEN {CANCELLED_SQL} THEN 1 ELSE 0 END) / COUNT(*),
+                        2
+                    ) AS cancelled_pct,
+                    ROUND(
+                        AVG(CASE WHEN {NOT_CANCELLED_SQL} AND delay_minutes > 0 THEN delay_minutes END),
+                        2
+                    ) AS avg_delay_minutes_positive_only
+                FROM flights
+                WHERE direction = 'D'
+                GROUP BY airline_name
+                HAVING COUNT(*) >= :min_flights
+                ORDER BY on_time_pct DESC
+                LIMIT :limit
+            """),
+            {"min_flights": min_flights, "limit": limit},
+        ).fetchall()
+
+        airlines = [
+            {
+                "airline_name": row.airline_name,
+                "total_flights": row.total_flights,
+                "on_time_pct": float(row.on_time_pct) if row.on_time_pct is not None else 0.0,
+                "cancelled_pct": float(row.cancelled_pct) if row.cancelled_pct is not None else 0.0,
+                "avg_delay_minutes_positive_only": (
+                    float(row.avg_delay_minutes_positive_only)
+                    if row.avg_delay_minutes_positive_only is not None
+                    else None
+                ),
+            }
+            for row in rows
+            if row.airline_name
+        ]
+
+        return {"airlines": airlines}
+
+    except Exception as e:
+        logger.error("Error retrieving top on-time airlines", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve top on-time airlines")
 
 
 @router.get(

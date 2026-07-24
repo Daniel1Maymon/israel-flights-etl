@@ -7,6 +7,7 @@ export const API_ENDPOINTS = {
   FLIGHTS: `${API_BASE_URL}/api/v1/flights`,
   AIRLINES_STATS: `${API_BASE_URL}/api/v1/airlines/stats`,
   AIRLINES_TOP_BOTTOM: `${API_BASE_URL}/api/v1/airlines/top-bottom`,
+  AIRLINES_TOP_ON_TIME: `${API_BASE_URL}/api/v1/airlines/top-on-time`,
   AIRLINE_DESTINATIONS: (airline: string) => `${API_BASE_URL}/api/v1/airlines/${encodeURIComponent(airline)}/destinations`,
   DESTINATIONS: `${API_BASE_URL}/api/v1/destinations`,
   DESTINATION_CITIES: `${API_BASE_URL}/api/v1/destinations/cities`,
@@ -17,4 +18,5 @@ export const API_ENDPOINTS = {
   AI_SEARCH: `${API_BASE_URL}/api/v1/ai-search`,
   ADMIN_METRICS: `${API_BASE_URL}/api/v1/admin/metrics`,
   ADMIN_EVENTS: `${API_BASE_URL}/api/v1/admin/events`,
+  STATS_OVERVIEW: `${API_BASE_URL}/api/v1/stats/overview`,
 };

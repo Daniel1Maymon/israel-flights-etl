@@ -121,6 +121,7 @@ const translations = {
 
     // Destination Performance Table
     'performance.tableTitle': 'Airline Performance to {city}',
+    'performance.topTableTitle': 'Top 10 Airlines by On-Time Performance',
     'performance.totalFlights': 'Total Flights',
     'performance.onTimePct': 'On Time %',
     'performance.cancelledPct': 'Cancelled %',
@@ -128,6 +129,11 @@ const translations = {
     'performance.minutes': 'min',
     'performance.noResults': 'No data found for this destination',
     'performance.selectCity': 'Search for a destination to see airline performance',
+
+    // Overview stats
+    'stats.flights': 'Flights',
+    'stats.airlines': 'Airlines',
+    'stats.destinations': 'Destinations',
 
     // Flights Table
     'flights.title': 'Historical Flight Data',
@@ -294,6 +300,7 @@ const translations = {
 
     // Destination Performance Table
     'performance.tableTitle': 'ביצועי חברות תעופה ל{city}',
+    'performance.topTableTitle': '10 חברות התעופה הכי מדייקות',
     'performance.totalFlights': 'סה"כ טיסות',
     'performance.onTimePct': '% בזמן',
     'performance.cancelledPct': '% ביטולים',
@@ -301,6 +308,11 @@ const translations = {
     'performance.minutes': 'דקות',
     'performance.noResults': 'לא נמצאו נתונים עבור יעד זה',
     'performance.selectCity': 'חפשו יעד כדי לראות ביצועי חברות תעופה',
+
+    // Overview stats
+    'stats.flights': 'טיסות',
+    'stats.airlines': 'חברות תעופה',
+    'stats.destinations': 'יעדים',
 
     // Flights Table
     'flights.title': 'נתוני טיסות היסטוריים',
