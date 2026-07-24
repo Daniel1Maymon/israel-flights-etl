@@ -9,6 +9,7 @@ import structlog
 
 from app.database import get_db
 from app.models.flight import Flight
+from app.services.flight_status import CANCELLED_SQL, NOT_CANCELLED_SQL
 
 logger = structlog.get_logger()
 
@@ -170,15 +171,15 @@ async def get_airline_performance(
                     airline_name,
                     COUNT(*) AS total_flights,
                     ROUND(
-                        100.0 * SUM(CASE WHEN delay_minutes <= 15 THEN 1 ELSE 0 END) / COUNT(*),
+                        100.0 * SUM(CASE WHEN {NOT_CANCELLED_SQL} AND delay_minutes <= 15 THEN 1 ELSE 0 END) / COUNT(*),
                         2
                     ) AS on_time_pct,
                     ROUND(
-                        100.0 * SUM(CASE WHEN status_en = 'CANCELED' THEN 1 ELSE 0 END) / COUNT(*),
+                        100.0 * SUM(CASE WHEN {CANCELLED_SQL} THEN 1 ELSE 0 END) / COUNT(*),
                         2
                     ) AS cancelled_pct,
                     ROUND(
-                        AVG(CASE WHEN delay_minutes > 0 THEN delay_minutes END),
+                        AVG(CASE WHEN {NOT_CANCELLED_SQL} AND delay_minutes > 0 THEN delay_minutes END),
                         2
                     ) AS avg_delay_minutes_positive_only
                 FROM flights

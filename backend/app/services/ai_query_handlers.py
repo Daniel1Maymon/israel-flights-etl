@@ -15,13 +15,17 @@ from typing import Any
 
 from app.config import settings
 from app.services.ai_db import run_readonly
+from app.services.flight_status import CANCELLED_SQL, NOT_CANCELLED_SQL
 
 # Common metric projection reused by every handler.
-_METRICS_SELECT = """
+# On-time and avg-delay EXCLUDE cancelled flights: a cancelled flight is not "on time", and its
+# delay_minutes is junk (values up to ±2700). Denominator stays total (so cancels lower on-time%).
+# Cancellation detection is the canonical one from flight_status (see that module for why).
+_METRICS_SELECT = f"""
     COUNT(*) AS total_flights,
-    ROUND(100.0 * SUM(CASE WHEN delay_minutes <= 15 THEN 1 ELSE 0 END) / COUNT(*), 1) AS on_time_pct,
-    ROUND(100.0 * SUM(CASE WHEN status_en ILIKE 'CANCELED' THEN 1 ELSE 0 END) / COUNT(*), 1) AS cancel_pct,
-    ROUND(AVG(CASE WHEN delay_minutes > 0 THEN delay_minutes END), 1) AS avg_delay_minutes
+    ROUND(100.0 * SUM(CASE WHEN {NOT_CANCELLED_SQL} AND delay_minutes <= 15 THEN 1 ELSE 0 END) / COUNT(*), 1) AS on_time_pct,
+    ROUND(100.0 * SUM(CASE WHEN {CANCELLED_SQL} THEN 1 ELSE 0 END) / COUNT(*), 1) AS cancel_pct,
+    ROUND(AVG(CASE WHEN {NOT_CANCELLED_SQL} AND delay_minutes > 0 THEN delay_minutes END), 1) AS avg_delay_minutes
 """
 
 # metric -> (order column, default direction for "best first")

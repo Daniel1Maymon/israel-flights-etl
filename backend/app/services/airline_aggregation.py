@@ -19,6 +19,7 @@ import time
 import structlog
 
 from app.models.flight import Flight
+from app.services.flight_status import is_cancelled
 from app.schemas.airline import (
     AirlineKPI, 
     AirlineStatsResponse, 
@@ -318,10 +319,16 @@ class AirlineAggregationService:
                 )
             ).label('total_flights'),
             
-            # Count on-time departures (delay <= 20 or null)
+            # Count on-time departures (delay <= 20 or null), EXCLUDING cancelled flights.
+            # A cancelled flight is not "on time"; its delay_minutes is junk (often <= 20 or NULL),
+            # so without this exclusion cancellations inflate on-time count (on_time% + cancel% > 100%).
             func.count(
                 case(
-                    (and_(Flight.direction == 'D', or_(Flight.delay_minutes <= 20, Flight.delay_minutes.is_(None))), 1),
+                    (and_(
+                        Flight.direction == 'D',
+                        ~is_cancelled(Flight),
+                        or_(Flight.delay_minutes <= 20, Flight.delay_minutes.is_(None)),
+                    ), 1),
                     else_=None
                 )
             ).label('on_time_flights'),
@@ -334,32 +341,34 @@ class AirlineAggregationService:
                 )
             ).label('delayed_flights'),
             
-            # Count cancelled departures
+            # Count cancelled departures (canonical detection — see flight_status.is_cancelled)
             func.count(
                 case(
-                    (and_(
-                        Flight.direction == 'D',
-                        or_(
-                        Flight.status_en.ilike('%cancelled%'),
-                        Flight.status_he.ilike('%בוטל%')
-                        )
-                    ), 1),
+                    (and_(Flight.direction == 'D', is_cancelled(Flight)), 1),
                     else_=None
                 )
             ).label('cancelled_flights'),
             
-            # Calculate average delay for delayed flights only
+            # Calculate average delay for delayed flights only (cancelled excluded: junk delay values)
             func.avg(
                 case(
-                    (and_(Flight.direction == 'D', Flight.delay_minutes > 0), Flight.delay_minutes),
+                    (and_(
+                        Flight.direction == 'D',
+                        ~is_cancelled(Flight),
+                        Flight.delay_minutes > 0,
+                    ), Flight.delay_minutes),
                     else_=None
                 )
             ).label('avg_delay_delayed_only'),
-            
-            # Calculate average delay for all flights (including on-time)
+
+            # Calculate average delay for all flights (including on-time; cancelled excluded: junk delay values)
             func.avg(
                 case(
-                    (and_(Flight.direction == 'D', Flight.delay_minutes.isnot(None)), Flight.delay_minutes),
+                    (and_(
+                        Flight.direction == 'D',
+                        ~is_cancelled(Flight),
+                        Flight.delay_minutes.isnot(None),
+                    ), Flight.delay_minutes),
                     else_=None
                 )
             ).label('avg_delay_all_flights'),
