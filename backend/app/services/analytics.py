@@ -20,9 +20,11 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-# Blended $/1M tokens estimate for gemini-2.5-flash (input+output), matches the ~$6-8 / 20M
-# figure in config.py. Adjust if the provider/model changes.
-COST_PER_1M_TOKENS = 0.35
+# Blended $/1M tokens estimate for gemini-2.5-flash. Official rates (ai.google.dev/gemini-api/docs/pricing,
+# paid tier): input $0.30/1M, output $2.50/1M. This app is input-heavy (~3 prompt-heavy calls per
+# question, short outputs), so assume ~75% input / 25% output: 0.75*0.30 + 0.25*2.50 = $0.85/1M.
+# This is an estimate — total tokens aren't split into input/output. At the 20M/mo ceiling ≈ $17.
+COST_PER_1M_TOKENS = 0.85
 
 # Idempotent DDL so a fresh deploy self-heals; the ALTERs migrate an already-existing table.
 _DDL = """
