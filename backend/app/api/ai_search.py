@@ -15,6 +15,7 @@ import time
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -45,6 +46,14 @@ def _ensure_ready() -> None:
         except Exception as e:  # non-fatal; tables usually already exist
             logger.warning("ensure_tables failed", error=str(e))
         _tables_ready = True
+
+
+def _client_ip(request: Request) -> str | None:
+    """Real client IP: first hop of X-Forwarded-For (Railway proxies), else the socket peer."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 
 def _resolve(db: Session, question: str, user_key: str) -> tuple[AISearchResponse, int]:
@@ -91,18 +100,22 @@ async def ai_search(
         response.set_cookie(
             "rankair_uid", uid, max_age=60 * 60 * 24 * 400, httponly=True, samesite="lax"
         )
-    client_ip = request.client.host if request.client else None
+    client_ip = _client_ip(request)
     user_key = make_user_key(client_ip, uid)
 
     result, tokens = _resolve(db, question, user_key)
 
-    # analytics: one row per request, best-effort (never breaks the user's response)
+    # analytics: one row per request, best-effort (never breaks the user's response). Runs in a
+    # threadpool so the blocking country lookup + DB write don't stall the event loop.
     latency_ms = int((time.perf_counter() - started) * 1000)
     try:
-        record_event(
+        await run_in_threadpool(
+            record_event,
             db,
             question=question,
+            answer=result.answer,
             user_key=user_key,
+            ip=client_ip,
             refused=result.refused,
             reason=result.reason,
             tokens=tokens,
