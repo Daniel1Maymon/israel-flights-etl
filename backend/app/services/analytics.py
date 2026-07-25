@@ -20,6 +20,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.services.schema_init import run_ddl
+
 # Blended $/1M tokens estimate for gemini-2.5-flash. Official rates (ai.google.dev/gemini-api/docs/pricing,
 # paid tier): input $0.30/1M, output $2.50/1M. This app is input-heavy (~3 prompt-heavy calls per
 # question, short outputs), so assume ~75% input / 25% output: 0.75*0.30 + 0.25*2.50 = $0.85/1M.
@@ -55,10 +57,13 @@ _country_cache: dict[str, tuple[str | None, str | None]] = {}
 
 
 def ensure_events_table(engine: Engine) -> None:
-    """Create/migrate the events table + index if missing (call at startup and before reads)."""
-    with engine.begin() as conn:
-        for stmt in filter(None, (s.strip() for s in _DDL.split(";"))):
-            conn.exec_driver_sql(stmt)
+    """
+    Create/migrate the events table + index if missing. CALL AT STARTUP ONLY.
+
+    This block ALTERs the table, which takes an AccessExclusiveLock. Running it on the
+    request path let two workers deadlock against each other -- see schema_init.run_ddl.
+    """
+    run_ddl(engine, _DDL, label="ai_events")
 
 
 def lookup_country(ip: str | None) -> tuple[str | None, str | None]:

@@ -20,6 +20,19 @@ from sqlglot import exp
 # Only these tables may be referenced.
 ALLOWED_TABLES = {"flights"}
 
+# Columns the AI path may project or filter on. Everything else on `flights` --
+# raw_s3_path, scrape_timestamp, checkin_counters, checkin_zone, flight_id, ... -- is
+# internal and must never reach a client.
+#
+# The system prompt already lists this subset, but a prompt is guidance, not
+# enforcement: `SELECT *` returns all 21 columns whatever the prompt says, and
+# "give me all the information" is exactly the phrasing that produces it.
+AI_SELECTABLE_COLUMNS = {
+    "airline_name", "airline_code", "direction",
+    "location_en", "location_he", "location_city_en", "country_en",
+    "scheduled_time", "actual_time", "delay_minutes", "status_en", "terminal",
+}
+
 # Statement/expression node *type names* that must never appear (version-robust: compare by name).
 FORBIDDEN_NODE_NAMES = {
     "Insert", "Update", "Delete", "Merge", "Drop", "Create", "Alter", "AlterTable",
@@ -87,7 +100,40 @@ def validate_and_prepare(sql: str, max_rows: int = 50) -> str:
         if fname in BANNED_FUNCS:
             raise SqlGuardError(f"banned function: {fname}")
 
-    # 6) force / clamp LIMIT
+    # 6) projection whitelist — the guard must constrain WHICH columns come back,
+    #    not only that the statement is read-only.
+    #
+    #    `SELECT *` is rejected rather than expanded: expanding it here would silently
+    #    change the LLM's query, and an explicit projection is something we can check.
+    #    COUNT(*) stays legal, so only Star nodes in a SELECT list are rejected -- a
+    #    blanket ban on exp.Star would break the aggregate queries the prompt requires.
+    for select in root.find_all(exp.Select):
+        for projection in select.expressions:
+            if isinstance(projection, exp.Star):
+                raise SqlGuardError("star projection not allowed")
+            if isinstance(projection, exp.Column) and isinstance(projection.this, exp.Star):
+                raise SqlGuardError("qualified star projection not allowed")
+
+    # Names the query defines itself (output aliases, CTE names) are legal to reference
+    # downstream in ORDER BY / GROUP BY / HAVING.
+    defined_names = {
+        (a.alias or "").lower() for a in root.find_all(exp.Alias) if a.alias
+    }
+    defined_names |= {c.alias_or_name.lower() for c in root.find_all(exp.CTE)}
+    defined_names |= {
+        (t.alias or "").lower() for t in root.find_all(exp.Table) if t.alias
+    }
+
+    for col in root.find_all(exp.Column):
+        if isinstance(col.this, exp.Star):
+            continue  # handled above
+        name = (col.name or "").lower()
+        if not name:
+            continue
+        if name not in AI_SELECTABLE_COLUMNS and name not in defined_names:
+            raise SqlGuardError(f"column not allowed: {name}")
+
+    # 7) force / clamp LIMIT
     n = max_rows
     limit_node = root.args.get("limit") if hasattr(root, "args") else None
     if limit_node is not None:

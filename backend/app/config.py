@@ -1,6 +1,7 @@
 import os
 from typing import List
 from urllib.parse import urlparse
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
     db_port: int = 5432
     db_name: str = "flights_db"
     db_user: str = "daniel"
-    db_password: str = "daniel"
+    db_password: str = ""
     postgres_flights_host: str | None = None
     postgres_flights_port: int | None = None
     postgres_flights_db: str | None = None
@@ -75,18 +76,46 @@ class Settings(BaseSettings):
     # Pagination settings
     default_page_size: int = 20
     max_page_size: int = 50
+
+    # --- Response bounds -------------------------------------------------------
+    # Hard ceiling on rows in any public response. Every data path must honour this:
+    # it is what makes response cost independent of what the client asks for.
+    max_public_rows: int = 100
+    # Widest date span the flight board will query. The row cap bounds the response;
+    # this bounds the work Postgres does before the LIMIT can discard anything.
+    max_board_window_days: int = 31
+    # Deepest OFFSET a client may reach. OFFSET n makes Postgres materialise and
+    # discard n sorted rows, so deep pages are the most expensive requests in the API.
+    max_offset: int = 10_000
+    # How far back /flight-board/options looks when building filter dropdowns.
+    options_horizon_days: int = 90
+    # How far back the board will serve RAW per-flight rows. The archive is built by a
+    # year of daily collection and cannot be re-derived from the IAA feed (rolling 4-day
+    # window), so raw history is withheld; aggregates still cover the full range.
+    board_history_days: int = 30
+    # Concurrent SSE connections. Long-lived, so a per-minute rate limit cannot bound them.
+    max_sse_connections: int = 50
+    sse_query_threads: int = 4
     
     # Logging
     log_level: str = "INFO"
     log_format: str = "json"
     
     # Security
-    secret_key: str = "your-secret-key-change-in-production"
+    # Empty defaults are deliberate: a working default lets a misconfigured deploy start
+    # successfully and run on a value that is public in this file. See _require_prod_secrets.
+    secret_key: str = ""
     access_token_expire_minutes: int = 30
-    
+
     # Rate limiting
     rate_limit_per_minute: int = 100
     rate_limit_burst: int = 20
+    # NOTE: counters are per-process (see app/middleware/rate_limit.py). With workers > 1
+    # the effective limit is rate_limit_per_minute * workers. `workers` is 1 today; raise
+    # it and the limiter needs a shared backend before the number below means anything.
+    # Publish /docs, /redoc, /openapi.json. Off by default: the schema lists every route,
+    # every query parameter, and every response model.
+    enable_api_docs: bool = False
     
     # Monitoring
     sentry_dsn: str = ""
@@ -116,6 +145,34 @@ class Settings(BaseSettings):
     # Admin analytics dashboard — Bearer token guarding GET /api/v1/admin/*.
     # Fail-closed: if unset, all admin endpoints return 401.
     admin_token: str = ""                           # ADMIN_TOKEN
+
+    @model_validator(mode="after")
+    def _require_prod_secrets(self) -> "Settings":
+        """
+        Fail closed in production rather than booting on a placeholder.
+
+        A missing secret should crash at startup, where it is loud, instead of running
+        for months on a value committed to this file. Mirrors how admin_token already
+        behaves (unset -> every admin request 401s).
+        """
+        if not os.getenv("RAILWAY_ENVIRONMENT"):
+            return self  # local/dev: defaults are fine
+        missing: list[str] = []
+        # SECRET_KEY is deliberately NOT required: nothing reads it (no JWT/session
+        # code exists yet), so refusing to boot over it would be a self-inflicted
+        # outage protecting nothing. Add it here the moment it is actually used --
+        # signing with an empty or placeholder key is the failure worth blocking.
+        #
+        # DATABASE_URL carries its own credentials, so db_password is only required
+        # when the URL is being assembled from parts.
+        if not os.getenv("DATABASE_URL") and not self.postgres_flights_password:
+            if not self.db_password:
+                missing.append("DB_PASSWORD")
+        if missing:
+            raise ValueError(
+                f"Refusing to start: {', '.join(missing)} must be set in production."
+            )
+        return self
 
     class Config:
         env_file = ".env"

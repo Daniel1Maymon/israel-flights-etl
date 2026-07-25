@@ -15,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.types import TypeDecorator, DateTime as SQLDateTime
 from datetime import datetime, timedelta
 from typing import Generator
+from unittest.mock import patch
 import os
 import sys
 
@@ -145,19 +146,179 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     
     # Override dependencies
     app.dependency_overrides[get_db] = override_get_db
-    
+
     try:
         from app.api.deps import get_database
         app.dependency_overrides[get_database] = override_get_database
     except ImportError:
         pass
-    
-    # Create test client
-    with TestClient(app) as test_client:
-        yield test_client
-    
+
+    # The lifespan handler calls check_db_connection() against the real Postgres and
+    # raises RuntimeError on failure. Tests run against in-memory SQLite, so without
+    # this patch every client-fixture test errors at setup and never reaches an assertion.
+    with patch("app.main.check_db_connection", return_value=True):
+        with TestClient(app) as test_client:
+            yield test_client
+
     # Clean up - remove all dependency overrides
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """
+    Clear rate-limit counters around every test.
+
+    The middleware instance lives on the module-level `app`, so its counters persist
+    across tests. Without this, any test that issues a burst leaves later tests being
+    answered with 429 -- failures that look like unrelated bugs.
+    """
+    from app.middleware.rate_limit import RateLimitMiddleware
+
+    def _clear():
+        node = getattr(app, "middleware_stack", None)
+        while node is not None:
+            if isinstance(node, RateLimitMiddleware):
+                node._hits.clear()
+                return
+            node = getattr(node, "app", None)
+
+    _clear()
+    yield
+    _clear()
+
+
+@pytest.fixture
+def make_flights(db_session: Session):
+    """
+    Factory: insert N flights spread across a date range.
+
+    Used by the security tests to prove that responses stay bounded no matter how
+    many rows the table holds.
+    """
+    counter = {"batch": 0}
+
+    def _make(count: int, start: datetime = None, step: timedelta = None) -> list:
+        start = start or (datetime.utcnow() - timedelta(minutes=30))
+        step = step or timedelta(minutes=1)
+        # Batch number keeps flight_id unique when a test calls the factory twice.
+        batch = counter["batch"]
+        counter["batch"] += 1
+        flights = [
+            Flight(
+                flight_id=f"bulk-{batch}-{i:06d}",
+                airline_code="LY",
+                flight_number=f"LY{i:04d}",
+                direction="D" if i % 2 == 0 else "A",
+                location_iata="JFK",
+                location_en="New York",
+                location_he="ניו יורק",
+                location_city_en="New York",
+                country_en="United States",
+                country_he="ארצות הברית",
+                airline_name="El Al",
+                scheduled_time=start + (step * i),
+                actual_time=None,
+                delay_minutes=0,
+                terminal="3",
+                checkin_counters="1-10",
+                checkin_zone="A",
+                status_en="On Time",
+                status_he="בזמן",
+                scrape_timestamp=datetime.utcnow(),
+                raw_s3_path=f"s3://rankair-raw/flights/2026/07/25/{i}.json",
+            )
+            for i in range(count)
+        ]
+        db_session.add_all(flights)
+        db_session.commit()
+        return flights
+
+    return _make
+
+
+class _NonClosingSession:
+    """
+    Wraps the test session so production code calling .close() can't kill it.
+
+    flight_board.py builds its own session via SessionLocal() instead of the get_db
+    dependency, so the normal dependency_overrides seam does not reach it. Tests patch
+    SessionLocal with this wrapper to route the SSE endpoint at the test database.
+    """
+
+    def __init__(self, session: Session):
+        self._session = session
+
+    def __getattr__(self, name):
+        return getattr(self._session, name)
+
+    def close(self):  # no-op: the db_session fixture owns the lifecycle
+        pass
+
+
+@pytest.fixture
+def sse_db(db_session: Session):
+    """Point the flight-board SSE endpoint's SessionLocal at the test database."""
+    with patch("app.api.flight_board.SessionLocal", lambda: _NonClosingSession(db_session)):
+        yield db_session
+
+
+class _StubRequest:
+    """Minimal Request stand-in: the SSE generator only calls is_disconnected()."""
+
+    async def is_disconnected(self) -> bool:
+        return False
+
+
+@pytest.fixture
+def first_sse_frame(sse_db):
+    """
+    Return a callable that yields the first parsed SSE data frame from the flight board.
+
+    Drives the endpoint's async generator directly rather than going through TestClient.
+    Starlette's TestClient hangs on `await request.is_disconnected()` for an infinite
+    stream, so an HTTP-level SSE test deadlocks instead of asserting. This still runs the
+    real route handler, the real query, and the real serialisation.
+    """
+    import asyncio
+    import json as _json
+
+    from app.api.flight_board import stream_flight_board
+
+    # Calling the route function directly skips FastAPI's dependency resolution, so
+    # any omitted parameter arrives as a raw Query() object instead of its default.
+    # Every parameter must therefore be passed explicitly.
+    defaults = dict(
+        direction=None,
+        flight_number=None,
+        airline_code=None,
+        location=None,
+        terminal=None,
+        date_from=None,
+        date_to=None,
+        sort_by="scheduled_time",
+        sort_order="asc",
+    )
+
+    def _get(**query) -> dict:
+        params = {**defaults, **query}
+
+        async def _run():
+            response = await stream_flight_board(request=_StubRequest(), **params)
+            iterator = response.body_iterator
+            try:
+                async for chunk in iterator:
+                    text = chunk if isinstance(chunk, str) else chunk.decode()
+                    for line in text.splitlines():
+                        if line.startswith("data:"):
+                            return _json.loads(line[len("data:"):].strip())
+            finally:
+                await iterator.aclose()
+            raise AssertionError("stream produced no data frame")
+
+        return asyncio.run(asyncio.wait_for(_run(), timeout=30))
+
+    return _get
 
 
 @pytest.fixture

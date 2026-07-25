@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.api.flight_board import _build_query, _compute_date_window
+from app.api.flight_board import MAX_WINDOW_DAYS, _build_query, _compute_date_window
 from app.models.flight import Flight
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
@@ -52,32 +52,37 @@ class TestComputeDateWindow:
 
         assert from_dt == datetime(2024, 6, 15, 13, 30, 0, tzinfo=ISRAEL_TZ)
 
-    def test_default_to_is_end_of_today(self):
-        now = datetime(2024, 6, 15, 14, 30, 0, tzinfo=ISRAEL_TZ)
-        _, to_dt = _compute_date_window(None, None, now_il=now)
+    def test_default_to_is_the_db_derived_window_end(self):
+        """
+        The default ceiling is the latest scheduled_time in the DB, not end-of-today.
 
-        assert to_dt.year == 2024
-        assert to_dt.month == 6
-        assert to_dt.day == 15
-        assert to_dt.hour == 23
-        assert to_dt.minute == 59
-        assert to_dt.second == 59
+        (This test previously asserted end-of-today; the board moved to a rolling
+        DB-derived ceiling and the assertion was never updated.)
+        """
+        now = datetime(2024, 6, 15, 14, 30, 0, tzinfo=ISRAEL_TZ)
+        window_end = datetime(2024, 6, 17, 9, 45, 0, tzinfo=ISRAEL_TZ)
+
+        _, to_dt = _compute_date_window(None, None, now_il=now, window_end_dt=window_end)
+
+        assert to_dt == window_end
 
     # ── Midnight edge case ──────────────────────────────────────────────────
 
     def test_midnight_cutoff_crosses_into_previous_day(self):
         """At 00:05 Israel time the 1-hour cutoff falls on the previous calendar day."""
         now = datetime(2024, 6, 15, 0, 5, 0, tzinfo=ISRAEL_TZ)
-        from_dt, to_dt = _compute_date_window(None, None, now_il=now)
+        window_end = datetime(2024, 6, 15, 23, 0, 0, tzinfo=ISRAEL_TZ)
+        from_dt, to_dt = _compute_date_window(
+            None, None, now_il=now, window_end_dt=window_end
+        )
 
         # cutoff = 23:05 of June 14
         assert from_dt.day == 14
         assert from_dt.hour == 23
         assert from_dt.minute == 5
 
-        # end-of-day is still June 15
-        assert to_dt.day == 15
-        assert to_dt.hour == 23
+        # ceiling comes from the DB, untouched by the midnight rollover
+        assert to_dt == window_end
 
     def test_one_minute_past_midnight(self):
         now = datetime(2024, 3, 20, 0, 1, 0, tzinfo=ISRAEL_TZ)
@@ -112,34 +117,62 @@ class TestComputeDateWindow:
     # ── Explicit date overrides ─────────────────────────────────────────────
 
     def test_explicit_date_from_starts_at_midnight(self):
-        from_dt, to_dt = _compute_date_window(date(2024, 3, 15), None)
+        # Must sit inside the history floor: dates older than board_history_days are
+        # clamped now, so a fixed 2024 date would test the floor, not midnight.
+        d = (datetime.now(tz=ISRAEL_TZ) - timedelta(days=3)).date()
+        from_dt, to_dt = _compute_date_window(d, None)
 
         assert from_dt is not None
-        assert from_dt.year == 2024
-        assert from_dt.month == 3
-        assert from_dt.day == 15
+        assert from_dt.year == d.year
+        assert from_dt.month == d.month
+        assert from_dt.day == d.day
         assert from_dt.hour == 0
         assert from_dt.minute == 0
-        assert to_dt is None
+        # An open-ended upper bound used to mean "every flight from here on", which is
+        # an unbounded scan. The missing side is now filled in from the span cap.
+        assert to_dt is not None
+        assert (to_dt - from_dt) <= timedelta(days=MAX_WINDOW_DAYS)
 
     def test_explicit_date_to_ends_at_23_59(self):
-        from_dt, to_dt = _compute_date_window(None, date(2024, 3, 20))
+        d = (datetime.now(tz=ISRAEL_TZ) - timedelta(days=3)).date()
+        from_dt, to_dt = _compute_date_window(None, d)
 
         assert to_dt is not None
-        assert to_dt.day == 20
+        assert to_dt.day == d.day
         assert to_dt.hour == 23
         assert to_dt.minute == 59
         assert to_dt.second == 59
-        assert from_dt is None
+        # Likewise bounded below, so an open-ended lower bound cannot scan the archive.
+        assert from_dt is not None
+        assert (to_dt - from_dt) <= timedelta(days=MAX_WINDOW_DAYS)
 
     def test_explicit_range_both_dates(self):
-        from_dt, to_dt = _compute_date_window(date(2024, 1, 10), date(2024, 1, 15))
+        today = datetime.now(tz=ISRAEL_TZ).date()
+        d_from, d_to = today - timedelta(days=6), today - timedelta(days=1)
+        from_dt, to_dt = _compute_date_window(d_from, d_to)
 
-        assert from_dt.day == 10 and from_dt.hour == 0
-        assert to_dt.day == 15 and to_dt.hour == 23
+        assert from_dt.day == d_from.day and from_dt.hour == 0
+        assert to_dt.day == d_to.day and to_dt.hour == 23
+
+    def test_dates_older_than_the_history_floor_are_clamped(self):
+        """
+        Raw per-flight rows are not served from the archive.
+
+        The accumulated history cannot be re-derived from the IAA feed (rolling 4-day
+        window), so it is the one asset worth withholding. Aggregate endpoints still
+        cover the full range.
+        """
+        from app.config import settings
+
+        from_dt, to_dt = _compute_date_window(date(2024, 1, 10), date(2024, 1, 15))
+        floor = datetime.now(tz=ISRAEL_TZ) - timedelta(days=settings.board_history_days)
+
+        assert from_dt >= floor - timedelta(seconds=5), "history floor not applied"
+        assert to_dt >= floor - timedelta(seconds=5)
 
     def test_explicit_dates_use_israel_timezone(self):
-        from_dt, to_dt = _compute_date_window(date(2024, 3, 15), date(2024, 3, 20))
+        today = datetime.now(tz=ISRAEL_TZ).date()
+        from_dt, to_dt = _compute_date_window(today - timedelta(days=5), today - timedelta(days=1))
 
         assert from_dt.tzinfo is not None
         assert to_dt.tzinfo is not None
@@ -147,11 +180,13 @@ class TestComputeDateWindow:
 
     def test_explicit_dates_ignore_now_il(self):
         """now_il should have no effect when explicit dates are provided."""
+        today = datetime.now(tz=ISRAEL_TZ).date()
+        d_from, d_to = today - timedelta(days=10), today - timedelta(days=2)
         now = datetime(2024, 6, 15, 12, 0, 0, tzinfo=ISRAEL_TZ)
-        from_dt, to_dt = _compute_date_window(date(2024, 1, 1), date(2024, 1, 31), now_il=now)
+        from_dt, to_dt = _compute_date_window(d_from, d_to, now_il=now)
 
-        assert from_dt.month == 1 and from_dt.day == 1
-        assert to_dt.month == 1 and to_dt.day == 31
+        assert from_dt.month == d_from.month and from_dt.day == d_from.day
+        assert to_dt.month == d_to.month and to_dt.day == d_to.day
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +214,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None, airline_code=None,
             location=None, terminal=None,
             from_dt=now, to_dt=now + timedelta(hours=24),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         times = [r.scheduled_time for r in rows]
@@ -196,7 +231,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None, airline_code=None,
             location=None, terminal=None,
             from_dt=now, to_dt=now + timedelta(hours=24),
-            sort_by="scheduled_time", sort_order="desc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="desc",
         )
 
         times = [r.scheduled_time for r in rows]
@@ -214,7 +249,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None, airline_code=None,
             location=None, terminal=None,
             from_dt=now - timedelta(minutes=1), to_dt=now + timedelta(hours=1),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         flight_ids = [r.flight_id for r in rows]
@@ -238,7 +273,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None, airline_code=None,
             location=None, terminal=None,
             from_dt=cutoff, to_dt=now + timedelta(hours=12),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         ids = [r.flight_id for r in rows]
@@ -259,7 +294,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None, airline_code=None,
             location=None, terminal=None,
             from_dt=now - timedelta(hours=1), to_dt=end_of_today,
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         ids = [r.flight_id for r in rows]
@@ -284,7 +319,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None,
             airline_code="LY", location=None, terminal="3",
             from_dt=now, to_dt=now + timedelta(hours=24),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         assert total == 1
@@ -303,7 +338,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number="LY4",
             airline_code=None, location=None, terminal=None,
             from_dt=now, to_dt=now + timedelta(hours=24),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         assert total == 2
@@ -326,7 +361,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None,
             airline_code=None, location="לונדון", terminal=None,
             from_dt=now, to_dt=now + timedelta(hours=24),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         assert total == 1
@@ -345,7 +380,7 @@ class TestBuildQuery:
             db=db_session, direction="D", flight_number=None,
             airline_code=None, location=None, terminal=None,
             from_dt=now, to_dt=now + timedelta(hours=24),
-            sort_by="scheduled_time", sort_order="asc", page=1, size=10,
+            sort_by="scheduled_time", sort_order="asc",
         )
 
         assert total == 1
@@ -367,7 +402,9 @@ class TestBuildQuery:
         assert isinstance(data["terminals"], list)
 
     def test_options_filters_by_direction(self, client, db_session):
-        now = datetime(2024, 6, 15, 12, 0, 0, tzinfo=ISRAEL_TZ)
+        # Must be recent: /options is now bounded to a rolling horizon, so a fixed 2024
+        # date would fall outside it and the direction filter would never be exercised.
+        now = datetime.now(tz=ISRAEL_TZ) - timedelta(days=1)
         db_session.add_all([
             _flight(flight_id="opt-d", direction="D", airline_code="LY",
                     airline_name="El Al", flight_number="LY700", scheduled_time=now),

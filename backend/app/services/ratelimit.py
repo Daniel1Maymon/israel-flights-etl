@@ -17,6 +17,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.services.schema_init import run_ddl
 
 # Idempotent DDL so a fresh deploy recreates the counters (mirrors what we created on the DB).
 _DDL = """
@@ -36,10 +37,8 @@ CREATE TABLE IF NOT EXISTS ai_budget (
 
 
 def ensure_tables(engine: Engine) -> None:
-    """Create the counter tables if missing (call at startup)."""
-    with engine.begin() as conn:
-        for stmt in filter(None, (s.strip() for s in _DDL.split(";"))):
-            conn.exec_driver_sql(stmt)
+    """Create the counter tables if missing. CALL AT STARTUP ONLY (see schema_init)."""
+    run_ddl(engine, _DDL, label="ai_counters")
 
 
 def make_user_key(client_ip: str | None, cookie_id: str | None) -> str:
