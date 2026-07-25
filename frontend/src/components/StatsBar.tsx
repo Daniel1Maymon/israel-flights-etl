@@ -56,22 +56,29 @@ export const StatsBar = () => {
     { icon: MapPin, value: stats?.destinations, label: t("stats.destinations") },
   ];
 
+  // flex-wrap rather than a grid: with 5 items the leftover row (2 tiles on a 3-wide phone)
+  // centres instead of hanging off one edge. `basis` reproduces the 3-up / 5-up column widths.
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+    <div className="flex flex-wrap justify-center gap-2">
       {items.map(({ icon: Icon, value, label }) => (
         <div
           key={label}
-          className="flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-2 py-3"
+          className="flex min-w-0 basis-[calc(33.333%-0.5rem)] flex-col items-center justify-center gap-1 rounded-lg border border-border bg-card px-1.5 py-2.5 sm:basis-[calc(20%-0.64rem)] sm:flex-row sm:gap-2 sm:px-2 sm:py-3"
         >
-          <Icon className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="flex flex-col items-center text-center">
+          <Icon
+            className="h-4 w-4 shrink-0 text-muted-foreground sm:h-6 sm:w-6"
+            aria-hidden="true"
+          />
+          <div className="flex min-w-0 flex-col items-center text-center">
+            {/* Phone tiles are ~90px wide; a 6-figure count at text-2xl needs ~85px and used to
+                spill straight out of the card. Scale the number with the viewport instead. */}
             <span
-              className="text-2xl font-semibold text-foreground tabular-nums leading-none"
+              className="text-base font-semibold text-foreground tabular-nums leading-none sm:text-2xl"
               dir="ltr"
             >
               {fmt(value)}
             </span>
-            <span className="mt-1 text-[11px] text-muted-foreground">
+            <span className="mt-1 text-[10px] leading-tight text-muted-foreground sm:text-[11px]">
               {label}
             </span>
           </div>

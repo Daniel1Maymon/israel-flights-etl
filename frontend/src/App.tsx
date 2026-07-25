@@ -7,6 +7,8 @@ import { ThemeProvider } from "next-themes";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import Index from "./pages/Index";
 import FlightBoard from "./pages/FlightBoard";
+import Insights from "./pages/Insights";
+import Recovery from "./pages/Recovery";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +30,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/flight-board" element={<FlightBoard />} />
+              <Route path="/insights" element={<Insights />} />
+              <Route path="/recovery" element={<Recovery />} />
               <Route path="/admin" element={<Admin />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

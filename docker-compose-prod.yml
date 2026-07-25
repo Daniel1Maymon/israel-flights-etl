@@ -16,7 +16,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: "no"
     networks: [israel-flights-network]
 
   # Lightweight ETL runner (replaces Airflow)
@@ -37,7 +37,7 @@ services:
       POSTGRES_FLIGHTS_USER: ${POSTGRES_FLIGHTS_USER:-daniel}
       POSTGRES_FLIGHTS_PASSWORD: ${POSTGRES_FLIGHTS_PASSWORD:-change_me}
       SCHEDULE_INTERVAL_MINUTES: ${SCHEDULE_INTERVAL_MINUTES:-15}
-    restart: unless-stopped
+    restart: "no"
     networks: [israel-flights-network]
 
   backend:
@@ -61,7 +61,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-https://your-vercel-domain.vercel.app}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
-    restart: unless-stopped
+    restart: "no"
     networks: [israel-flights-network]
 
 

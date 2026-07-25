@@ -19,4 +19,8 @@ export const API_ENDPOINTS = {
   ADMIN_METRICS: `${API_BASE_URL}/api/v1/admin/metrics`,
   ADMIN_EVENTS: `${API_BASE_URL}/api/v1/admin/events`,
   STATS_OVERVIEW: `${API_BASE_URL}/api/v1/stats/overview`,
+  INSIGHTS_MONTHLY: `${API_BASE_URL}/api/v1/insights/monthly-by-nationality`,
+  INSIGHTS_WEEKDAY: `${API_BASE_URL}/api/v1/insights/by-weekday`,
+  INSIGHTS_HOUR: `${API_BASE_URL}/api/v1/insights/by-hour`,
+  INSIGHTS_RECOVERY: `${API_BASE_URL}/api/v1/insights/carrier-recovery`,
 };

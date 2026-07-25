@@ -13,7 +13,7 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - ./app:/app/app
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       - postgres_flights
     healthcheck:
@@ -37,7 +37,7 @@ services:
       # - If `POSTGRES_FLIGHTS_DATA_DIR` is NOT set, this uses a named Docker volume (deleted by `docker-compose down -v`).
       # - If `POSTGRES_FLIGHTS_DATA_DIR` IS set to an absolute path, this becomes a bind mount and will survive `down -v`.
       - ${POSTGRES_FLIGHTS_DATA_DIR:-postgres_flights_data}:/var/lib/postgresql/data
-    restart: unless-stopped
+    restart: "no"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U daniel -d flights_db"]
       interval: 10s

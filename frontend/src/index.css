@@ -135,14 +135,14 @@ All colors MUST be HSL.
     flex-direction: row;
   }
 
-  /* RTL Grid adjustments */
-  [dir="rtl"] .grid-cols-2 > :first-child {
-    order: 2;
-  }
-
-  [dir="rtl"] .grid-cols-2 > :last-child {
-    order: 1;
-  }
+  /* RTL Grid adjustments — intentionally none.
+     CSS Grid already lays out in the inline direction, so a container with dir="rtl" fills its
+     columns right-to-left without help. There used to be a rule here forcing order:2 on the first
+     child and order:1 on the last child of every `.grid-cols-2`, which reordered on TOP of that
+     and scrambled any 2-column grid holding more than two items: the recovery buckets rendered
+     never / expanded / recovered / partial, and the flight-board filters and admin KPI tiles were
+     shuffled the same way. StatsBar had already been rewritten to avoid `grid-cols-2` because of
+     it. Do not reintroduce. */
 
   /* RTL Table adjustments - removed transform to keep LTR column order */
 

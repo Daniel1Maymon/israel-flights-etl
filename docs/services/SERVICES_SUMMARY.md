@@ -125,7 +125,7 @@ This document provides a comprehensive overview of all services, tools, and tech
 - **Port**: 5433 (host), 5432 (container)
 - **User**: `daniel`
 - **Password**: `daniel`
-- **Records**: 9,909+ flight records
+- **Records**: 100,000 flight records
 
 **Why We Use It**:
 - ACID compliance for data integrity

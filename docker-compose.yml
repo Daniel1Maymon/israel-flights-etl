@@ -57,7 +57,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    restart: unless-stopped
+    restart: "no"
     # Networks commented out for Railway - Railway handles networking
     # networks:
     #   - israel-flights-network
@@ -99,7 +99,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    restart: unless-stopped
+    restart: "no"
     # Networks commented out for Railway
     # networks:
     #   - israel-flights-network

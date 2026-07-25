@@ -123,7 +123,7 @@ export const DestinationPerformanceTable = ({
         <div className="flex items-center gap-2">
           <PlaneTakeoff className="h-5 w-5 text-primary" />
           <CardTitle
-            className="text-xl font-semibold text-foreground"
+            className="text-lg font-semibold text-foreground sm:text-xl"
             style={language === "he" ? { fontFamily: "'Apple SD Gothic Neo', sans-serif", fontWeight: 800 } : undefined}
           >
             {title}
@@ -142,22 +142,25 @@ export const DestinationPerformanceTable = ({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <Table className="w-full table-fixed">
+            {/* Phone layout drops the two context columns (flight count, average delay) rather
+                than scrolling them out of reach — on-time % is the number the page exists to
+                show, so it must be visible without a sideways swipe. Full table returns at sm. */}
+            <Table className="w-full table-fixed sm:min-w-[520px]">
               <TableHeader>
                 <TableRow className="border-border/50">
-                  <TableHead className="w-[30%] whitespace-normal break-words">
+                  <TableHead className="w-[44%] whitespace-normal break-words sm:w-[30%]">
                     {colBtn("airline_name", t("airline.name"))}
                   </TableHead>
-                  <TableHead className="w-[16%] text-center">
+                  <TableHead className="hidden text-center sm:table-cell sm:w-[16%]">
                     {colBtn("total_flights", t("performance.totalFlights"))}
                   </TableHead>
-                  <TableHead className="w-[18%] text-center">
+                  <TableHead className="w-[28%] text-center sm:w-[18%]">
                     {colBtn("on_time_pct", t("performance.onTimePct"))}
                   </TableHead>
-                  <TableHead className="w-[18%] text-center">
+                  <TableHead className="w-[28%] text-center sm:w-[18%]">
                     {colBtn("cancelled_pct", t("performance.cancelledPct"))}
                   </TableHead>
-                  <TableHead className="w-[18%] text-center">
+                  <TableHead className="hidden text-center sm:table-cell sm:w-[18%]">
                     {colBtn("avg_delay_minutes_positive_only", t("performance.avgDelay"))}
                   </TableHead>
                 </TableRow>
@@ -174,7 +177,7 @@ export const DestinationPerformanceTable = ({
                         <span className="text-xs">{row.airline_name}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center text-xs px-2 py-2">
+                    <TableCell className="hidden text-center text-xs px-2 py-2 sm:table-cell">
                       {row.total_flights.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-center px-2 py-2">
@@ -183,7 +186,7 @@ export const DestinationPerformanceTable = ({
                     <TableCell className="text-center px-2 py-2">
                       {cancelBadge(row.cancelled_pct)}
                     </TableCell>
-                    <TableCell className="text-center text-xs px-2 py-2">
+                    <TableCell className="hidden text-center text-xs px-2 py-2 sm:table-cell">
                       {row.avg_delay_minutes_positive_only != null
                         ? `${row.avg_delay_minutes_positive_only.toFixed(1)} ${t("performance.minutes")}`
                         : "—"}

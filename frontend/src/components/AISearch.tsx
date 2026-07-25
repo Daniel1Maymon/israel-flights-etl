@@ -1,5 +1,6 @@
 import { useState, KeyboardEvent } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { API_ENDPOINTS } from "@/config/api";
 import { Sparkles, Loader2 } from "lucide-react";
 
@@ -37,6 +38,7 @@ const REFUSALS: Record<string, { en: string; he: string }> = {
 
 export const AISearch = () => {
   const { language } = useLanguage();
+  const isMobile = useIsMobile();
   const isHe = language === "he";
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -107,20 +109,30 @@ export const AISearch = () => {
 
   return (
     <div className="w-full max-w-3xl mx-auto" dir={isHe ? "rtl" : "ltr"}>
-      <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-3 shadow-sm sm:px-4">
         <Sparkles className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={onKey}
           maxLength={500}
-          placeholder={isHe ? "שאלו אותי כל דבר על ביצועי חברות התעופה…" : "Ask me anything about airline performance…"}
-          className="flex-1 bg-transparent outline-none text-base placeholder:text-muted-foreground"
+          // The full prompt is ~40 chars and clips mid-word inside a phone-width input, which
+          // reads as a broken layout rather than a hint. Use a short one below the md breakpoint.
+          placeholder={
+            isHe
+              ? isMobile
+                ? "שאלו אותי על חברות התעופה…"
+                : "שאלו אותי כל דבר על ביצועי חברות התעופה…"
+              : isMobile
+                ? "Ask about airline performance…"
+                : "Ask me anything about airline performance…"
+          }
+          className="min-w-0 flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground sm:text-base"
         />
         <button
           onClick={ask}
           disabled={loading || !question.trim()}
-          className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          className="shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 sm:px-4"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : isHe ? "שאל" : "Ask"}
         </button>

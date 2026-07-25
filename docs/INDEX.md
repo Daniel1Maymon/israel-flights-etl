@@ -1,11 +1,13 @@
-# Israel Flights ETL - Documentation Index
+# RankAir - Documentation Index
 
-Welcome to the Israel Flights ETL project documentation. This folder contains all project documentation organized by component and purpose.
+Welcome to the RankAir project documentation. This folder contains all project documentation organized by component and purpose.
 
 ## 📋 Project Overview
 - **[README.md](../README.md)** - Main project overview and setup instructions
 - **[PROJECT_GUIDE.md](guides/PROJECT_GUIDE.md)** - Complete end-to-end guide
 - **[PROJECT_TASKS.md](planning/PROJECT_TASKS.md)** - Current project tasks and priorities
+- **[RANKAIR_DESIGN.md](planning/RANKAIR_DESIGN.md)** - RankAir decision engine design
+- **[NEW_PAGES_PLAN.md](planning/NEW_PAGES_PLAN.md)** - Proposed nav bar + airline performance, insights, and recovery pages
 - **[RULES.md](meta/RULES.md)** - Development rules and guidelines
 
 ## 🏗️ Architecture & Design
@@ -47,7 +49,8 @@ docs/
 ├── reference/
 │   └── FIELD_MAPPING_TABLE.md
 ├── planning/
-│   └── PROJECT_TASKS.md
+│   ├── PROJECT_TASKS.md
+│   └── RANKAIR_DESIGN.md
 ├── meta/
 │   └── RULES.md
 ├── assets/

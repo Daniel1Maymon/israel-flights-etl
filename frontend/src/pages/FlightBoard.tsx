@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plane, Pause, Play, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plane, Pause, Play, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useFlightBoardSSE, type FlightBoardParams, type FlightRow } from '@/hooks/useFlightBoardSSE';
 import { API_ENDPOINTS } from '@/config/api';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { LanguageToggle } from '@/components/LanguageToggle';
+import { PageLayout } from '@/components/PageLayout';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,8 +113,7 @@ function SortIcon({ field, current, dir }: { field: string; current: string; dir
 // ---------------------------------------------------------------------------
 
 const FlightBoard = () => {
-  const navigate = useNavigate();
-  const { t, language, isRTL } = useLanguage();
+  const { t, language } = useLanguage();
 
   const [tab, setTab] = useState<'A' | 'D'>('A');
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
@@ -235,43 +232,21 @@ const FlightBoard = () => {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-background" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="max-w-[1400px] mx-auto px-4 py-4">
-
-        {/* ── Top bar ── */}
-        <div className="flex items-center justify-between mb-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-          >
-            {isRTL ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            {t('board.backToDashboard')}
-          </Button>
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
-            <ThemeToggle />
-          </div>
-        </div>
-
+    <PageLayout width="wide">
         {/* ── Page header ── */}
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <img src="/favicon.png" alt="RankAir" className="h-10 w-10 rounded-xl" />
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">{t('board.title')}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{t('board.airport')}</p>
-            </div>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">{t('board.title')}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{t('board.airport')}</p>
           </div>
 
           {/* Last updated + pause */}
-          <div className="flex flex-col items-end gap-1 text-sm">
+          <div className="flex flex-col items-start sm:items-end gap-1 text-sm">
             {formattedLastUpdated ? (
               <span className="text-muted-foreground">
                 {t('board.lastUpdated')} <span className="font-mono font-semibold text-foreground">{formattedLastUpdated}</span>
                 {total > 0 && (
-                  <span className="ml-2 text-xs text-muted-foreground">
+                  <span className="ms-2 text-xs text-muted-foreground">
                     ({total} {tab === 'A' ? t('board.arrivals') : t('board.departures')})
                   </span>
                 )}
@@ -524,9 +499,7 @@ const FlightBoard = () => {
             </table>
           </div>
         </div>
-
-      </div>
-    </div>
+    </PageLayout>
   );
 };
 
