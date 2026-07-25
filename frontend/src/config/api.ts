@@ -8,7 +8,13 @@ export const API_ENDPOINTS = {
   AIRLINES_STATS: `${API_BASE_URL}/api/v1/airlines/stats`,
   AIRLINES_TOP_BOTTOM: `${API_BASE_URL}/api/v1/airlines/top-bottom`,
   AIRLINES_TOP_ON_TIME: `${API_BASE_URL}/api/v1/airlines/top-on-time`,
+  /** @deprecated Unused. Its backend handler uses a 20-minute on-time window, a non-canonical
+   *  cancellation match, and groups by country in Hebrew but city in English, so its numbers
+   *  disagree with the rest of the site. Use AIRLINE_ROUTES instead. */
   AIRLINE_DESTINATIONS: (airline: string) => `${API_BASE_URL}/api/v1/airlines/${encodeURIComponent(airline)}/destinations`,
+  AIRLINE_DIRECTORY: `${API_BASE_URL}/api/v1/airlines/directory`,
+  AIRLINE_PROFILE: (airline: string) => `${API_BASE_URL}/api/v1/airlines/${encodeURIComponent(airline)}/profile`,
+  AIRLINE_ROUTES: (airline: string) => `${API_BASE_URL}/api/v1/airlines/${encodeURIComponent(airline)}/routes`,
   DESTINATIONS: `${API_BASE_URL}/api/v1/destinations`,
   DESTINATION_CITIES: `${API_BASE_URL}/api/v1/destinations/cities`,
   DESTINATION_AIRLINE_PERFORMANCE: `${API_BASE_URL}/api/v1/destinations/airline-performance`,

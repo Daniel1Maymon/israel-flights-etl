@@ -12,8 +12,7 @@ Date: 2026-07-24
 | 3. `/api/v1/insights/*` endpoints | done, verified against production data |
 | 4. `/insights` page (4 story cards) | done |
 | 5. `/recovery` page | done |
-| 6. `/airlines` leaderboard + reliability map | **not started** |
-| 7. `/airlines/:code` detail view | **not started** |
+| 6. `/airlines` airline analysis page + endpoints | done, verified against production data |
 
 Plus one unplanned fix: a mobile layout pass (see "Mobile" below).
 
@@ -158,26 +157,135 @@ to how the existing three pages mount.
 
 ## Page 2 — `/airlines` (ביצועי חברות)
 
-Home answers "which airline to Paris". This answers "how good is this airline".
+**Revised 2026-07-25 after review.** The original proposal here was a leaderboard plus a
+reliability scatter — a ranking page. That was the wrong premise and was rejected. The page is
+**one airline under a microscope**: its total performance, and its performance on every route it
+flies. It is the mirror of the front page — home is destination-first ("pick Paris, compare
+airlines"), this is airline-first ("pick El Al, compare its destinations").
 
-**Filter bar** — date range (3 / 6 / 12 months · since the crisis · all time), min flights,
-departures/arrivals, country.
+**Entry** — an airline search box at the top, mirroring `DestinationSearch` on home. Selecting a
+carrier deep-links to `/airlines/:code`, so a specific airline is shareable.
 
-**Podium** — top 3 cards, medal, on-time %, flight count.
+**Sections, top to bottom**
 
-**Leaderboard** — all ~104 airlines, sortable on every column, rank badge. Reuses
-`DestinationPerformanceTable`, which already does client-side multi-column sort.
+1. **Identity + KPI tiles** — flights, on-time %, cancelled %, avg delay when late, destinations
+   served. Each tile carries a quiet "vs airport average" line, because a bare 41.2% tells the
+   reader nothing without knowing TLV runs 36.5%. Context only — no rank, no league table.
+2. **Delay profile** — one stacked bar: early / 0–15 / 15–60 / 60+ / cancelled. Across TLV the
+   split is 1.6% / 34.9% / 51.8% / 11.7%, so *how* late a carrier runs is the real
+   differentiator and a single on-time percentage hides it.
+3. **Monthly on-time trend** — 11 months, so the carrier's own disruption dip and recovery show.
+4. **Per-destination table — the centrepiece.** Every route: flights, on-time %, cancelled %,
+   avg delay. Sortable and searchable, with best/worst route called out above it.
 
-**Reliability map** — scatter chart: x = on-time %, y = avg delay, bubble size = flight volume,
-colour = Israeli/foreign. Separates "big and reliable" from "punctual but tiny sample", which the
-`min_flights` filter alone cannot show.
+Why the per-route table carries the page: El Al overall is ~41% on time, but that is
+**61.4% to Abu Dhabi and 12.9% to Chisinau** (22.4% to Amsterdam, 24.7% to Frankfurt). The
+headline number conceals a 48-point spread inside a single airline.
 
-**Detail view `/airlines/:code`**
-- KPI tiles: flights · on-time % · cancelled % · avg delay · worst delay
-- Monthly on-time trend across the 11-month window (each carrier's crisis dip is visible here)
-- Delay distribution, stacked bar: early / 0–15 / 15–60 / 60+ / cancelled
-- Top destinations with per-route on-time %
-- Best and worst hour to fly this carrier
+Route counts under the canonical grouping: Arkia 98, El Al 84, Israir 81; foreign carriers 1–24,
+so the table is short for most of them but never empty.
+
+### Existing endpoint must be rewritten, not reused
+
+`GET /api/v1/airlines/{code}/destinations` already exists and looks like it does this job. It
+cannot be used as-is — three defects, all producing quietly wrong numbers that would disagree with
+the front page for the same route:
+
+- **On-time is `delay_minutes BETWEEN 0 AND 20`** — 20 minutes where the rest of the site uses 15,
+  and the lower bound excludes early departures, so a flight leaving 5 minutes early is counted as
+  *not* on time.
+- **Cancellations use `status_en == 'CANCELED'`** directly instead of `flight_status.py`. That
+  module exists because this exact drift happened before; this call site is the drift, still live.
+- **Destination granularity flips with language** — Hebrew groups by `country_he`, English by
+  `location_city_en`, so the same airline reports a different number of destinations depending on
+  the UI language.
+
+The rewrite uses `CANCELLED_SQL` / `NOT_CANCELLED_SQL` and the canonical destination grouping
+already used by `/destinations/cities` (group by the first Hebrew word of `location_he`, falling
+back to `location_city_en`; English name is `MIN(location_city_en)`), so London Luton and Stansted
+collapse into one LONDON / לונדון row exactly as they do elsewhere on the site.
+
+Delivered as new endpoints rather than an in-place edit, so nothing depending on the old handler
+breaks: `GET /airlines/directory`, `GET /airlines/{code}/profile`, `GET /airlines/{code}/routes`.
+The defective `/{code}/destinations` is left in place but marked `@deprecated` in
+`frontend/src/config/api.ts`; nothing in the frontend was calling it.
+
+**Label fix on top of the canonical grouping.** The group *key* is the first Hebrew word, which is
+right for grouping but wrong as a display label — it renders 'אבו דאבי' as 'אבו'. The routes
+endpoint therefore labels each group with the **shortest full** Hebrew name in it, which still
+collapses London's airports to a bare 'לונדון' but keeps multi-word cities intact.
+
+### Three sample-size guards, each added after seeing the page get it wrong
+
+Every one of these was a plausible-looking number the data could not support:
+
+| Where | What it claimed | Guard |
+|---|---|---|
+| Best-route callout | Bacau as El Al's best route at 75% — off **12 flights, a third of them cancelled** — ahead of Abu Dhabi's 63.5% across 1,143 | Callouts drawn only from routes with ≥50 flights, hidden entirely if fewer than 2 qualify; sample size printed beside the claim |
+| Monthly trend | Delta at **100% on-time in March 2026**, the month it almost stopped flying — 71 scheduled, only 12 operated | Months with <30 measured flights plot as `null`, leaving an honest gap in the line rather than a spike |
+| Route table | A 2-flight route at 100% | Routes below 10 flights excluded; flight count shown on every row so thin rows can be judged |
+| Worst-delay KPI | Arkia "2,883 min" reading as a property of the airline | The tile names the flight it came from (`1169 · לרנקה · 4 באפר׳`) |
+
+**Superseded 2026-07-25 — the definition was fixed instead of the label.** Naming the flight was
+treating the symptom. A flight that departs two days late was not delayed; it was cancelled and its
+passengers rebooked, and the upstream feed simply never changed the status from `DEPARTED`. That
+rule now lives in `flight_status.py` as `MAX_PLAUSIBLE_DELAY_MIN`, so it applies everywhere on the
+site at once rather than being patched per page.
+
+Threshold set to **1440 minutes (24 hours)**. The originally specified 25 hours left El Al's worst
+delay at 1,499 minutes — 24.98 hours, one minute under the line — which reads exactly like the
+problem it was meant to remove. A full calendar day is also the cleaner concept: past it, the next
+day's equivalent service has already gone.
+
+Blast radius is tiny and the affected rows are unambiguous: **16 of 151,527 (0.01%)**, being 48h,
+41.5h, three IDENTICAL 36.4h Athens arrivals across three different carriers (a feed artifact, not
+three real delays), 30.4h, 25.4h, 25.0h, 24.2h and similar. Effects:
+
+| | Before | After |
+|---|---|---|
+| Arkia worst delay | 2,883 min (48.0h) | 1,170 min (19.5h) |
+| El Al worst delay | 1,499 min (25.0h) | 1,206 min (20.1h) |
+| Highest surviving departure delay, site-wide | 2,883 min | 1,206 min |
+| March 2026 foreign cancellation rate | 80.84% | 80.84% |
+| Derived crisis window | 2026-03 → 2026-04 | unchanged |
+
+`COALESCE(delay_minutes, 0)` in the fragment is load-bearing: `delay_minutes` is NULL for flights
+with no recorded actual time, and without the guard `status OR NULL` is NULL, `NOT NULL` is NULL
+too, and those rows would vanish from **both** the cancelled and not-cancelled sets — silently
+dropping out of every aggregate on the site. `tests/test_flight_status.py` pins this, along with
+the boundary behaviour and the SQL/ORM equivalence. 12 tests, and they actually run (the ORM
+predicate works on SQLite).
+
+**Original finding, retained for context.** The figure was arithmetically correct — Arkia IZ 1169 to
+Larnaca, scheduled 2026-04-04 19:00, departed 2026-04-06 19:03, exactly 2 days and 3 minutes. The
+stored `delay_minutes` column was audited against `actual_time - scheduled_time` across all 75,866
+operated departures and disagrees on **zero** rows, so there is no rollover bug anywhere in the ETL.
+
+The problem was interpretive, not arithmetic. `MAX` is a one-observation statistic: Arkia's median
+delay is 30 min, p90 94 min, p99 288 min — the max is **ten times its own 99th percentile**, set by
+1 flight out of 5,966 delayed ones. Worse, 2026-04-04 falls inside the disruption window, so that
+flight is really a two-day postponement the feed recorded as `DEPARTED` rather than `CANCELED`.
+Only 4 departures airport-wide exceed 24 hours and two of them sit in the crisis months, meaning
+the bare tile was partly measuring the disruption rather than the carrier.
+
+Naming the flight keeps the striking number while making it a checkable fact about one departure.
+The alternative — swapping to p99 — was considered and not taken: it is more robust but loses the
+concrete detail, and the tile is not a metric anyone ranks carriers by.
+
+The trend guard needed a new `measured` field in the profile response — the count the percentage is
+actually computed from, which is not the scheduled count whenever a carrier has cancellations.
+
+### Design decisions
+
+- **Compare the airline to itself, never to other airlines.** An airport-wide benchmark was built
+  and then removed on review: each route is measured against *that airline's own* overall on-time
+  share (`vs its own average`), and the trend chart's reference line is the airline's own average.
+  A cross-carrier figure would quietly turn the page back into a ranking.
+- Entry is a search box deep-linking to `/airlines/:code`, mirroring `DestinationSearch`.
+
+Verified on production data: El Al 20,156 departures, 37.2% on time, 84 destinations, best route
+Abu Dhabi +26.3 points against its own average, worst Chisinau −23.9 — a 50-point spread inside one
+airline that the headline number completely hides.
 
 ---
 

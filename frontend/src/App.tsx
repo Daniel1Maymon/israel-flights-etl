@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import FlightBoard from "./pages/FlightBoard";
 import Insights from "./pages/Insights";
 import Recovery from "./pages/Recovery";
+import Airlines from "./pages/Airlines";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -30,6 +31,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/flight-board" element={<FlightBoard />} />
+              <Route path="/airlines" element={<Airlines />} />
+              <Route path="/airlines/:code" element={<Airlines />} />
               <Route path="/insights" element={<Insights />} />
               <Route path="/recovery" element={<Recovery />} />
               <Route path="/admin" element={<Admin />} />
