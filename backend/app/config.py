@@ -157,11 +157,12 @@ class Settings(BaseSettings):
         """
         if not os.getenv("RAILWAY_ENVIRONMENT"):
             return self  # local/dev: defaults are fine
-        missing = [
-            name
-            for name, value in (("SECRET_KEY", self.secret_key),)
-            if not value
-        ]
+        missing: list[str] = []
+        # SECRET_KEY is deliberately NOT required: nothing reads it (no JWT/session
+        # code exists yet), so refusing to boot over it would be a self-inflicted
+        # outage protecting nothing. Add it here the moment it is actually used --
+        # signing with an empty or placeholder key is the failure worth blocking.
+        #
         # DATABASE_URL carries its own credentials, so db_password is only required
         # when the URL is being assembled from parts.
         if not os.getenv("DATABASE_URL") and not self.postgres_flights_password:
