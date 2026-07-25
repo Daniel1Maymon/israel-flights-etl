@@ -7,6 +7,8 @@ from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 import structlog
 
+from app.api.pagination import check_offset
+from app.config import settings
 from app.database import get_db
 from app.models.flight import Flight
 from app.services.flight_status import CANCELLED_SQL, NOT_CANCELLED_SQL
@@ -36,32 +38,29 @@ async def list_destinations(
         if search:
             query = query.filter(Flight.location_en.ilike(f"%{search}%"))
         
-        # Get total count
-        total_count = query.count()
-        
-        # Calculate pagination
-        offset = (page - 1) * size
-        total_pages = (total_count + size - 1) // size
-        
-        # Get destinations
-        destinations = query.offset(offset).limit(size).all()
-        
+        offset = check_offset(page, size)
+        capped_size = min(size, settings.max_public_rows)
+
+        rows = query.offset(offset).limit(capped_size + 1).all()
+        has_more = len(rows) > capped_size
+        destinations = rows[:capped_size]
+
         # Convert to response format
         destination_data = []
         for dest in destinations:
             destination_data.append({
                 "destination": dest.location_en
             })
-        
+
         return {
             "destinations": destination_data,
-            "total_count": total_count,
             "page": page,
-            "size": size,
-            "total_pages": total_pages,
-            "has_more": page < total_pages
+            "size": capped_size,
+            "has_more": has_more
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error retrieving destinations", error=str(e))
         raise HTTPException(

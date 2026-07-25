@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import engine, get_db
-from app.services.analytics import ensure_events_table, get_metrics, get_recent_events
+from app.database import get_db
+from app.services.analytics import get_metrics, get_recent_events
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:
@@ -30,7 +30,9 @@ router = APIRouter(
 
 @router.get("/metrics")
 def metrics(db: Session = Depends(get_db)) -> dict:
-    ensure_events_table(engine)  # self-heal if no event has been recorded yet
+    # DDL removed from the request path: it ALTERs ai_events (AccessExclusiveLock), and
+    # two workers serving the dashboard concurrently deadlocked. Tables are created at
+    # startup instead -- see app.main lifespan.
     return get_metrics(db)
 
 
@@ -39,5 +41,4 @@ def events(
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
 ) -> dict:
-    ensure_events_table(engine)
     return {"events": get_recent_events(db, limit)}

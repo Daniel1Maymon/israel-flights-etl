@@ -34,7 +34,10 @@ export interface FlightBoardParams {
 
 interface UseFlightBoardSSEResult {
   flights: FlightRow[];
+  /** Rows in the current payload — not the number of matching flights in the DB. */
   total: number;
+  /** True when the window held more flights than the server will return. */
+  truncated: boolean;
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -46,6 +49,7 @@ export function useFlightBoardSSE(
 ): UseFlightBoardSSEResult {
   const [flights, setFlights] = useState<FlightRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -78,7 +82,10 @@ export function useFlightBoardSSE(
         const msg = JSON.parse(event.data);
         if (msg.type === 'flights') {
           setFlights(msg.data);
-          setTotal(msg.total ?? msg.data.length);
+          // Server sends `count` (rows in this payload). `total` was removed: it
+          // reported the full matching-row count and so disclosed table size.
+          setTotal(msg.count ?? msg.data.length);
+          setTruncated(msg.truncated === true);
           setLastUpdated(new Date());
           setLoading(false);
           setError(null);
@@ -113,5 +120,5 @@ export function useFlightBoardSSE(
     isPaused,
   ]);
 
-  return { flights, total, loading, error, lastUpdated };
+  return { flights, total, truncated, loading, error, lastUpdated };
 }

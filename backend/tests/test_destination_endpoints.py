@@ -14,10 +14,12 @@ class TestDestinationEndpoints:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "destinations" in data
-        assert "total_count" in data
+        # total_count / total_pages intentionally removed: an exact row count tells a
+        # scraper the table size and how many pages to walk. has_more replaces them.
+        assert "total_count" not in data
+        assert "total_pages" not in data
         assert "page" in data
         assert "size" in data
-        assert "total_pages" in data
         assert "has_more" in data
         assert isinstance(data["destinations"], list)
         assert len(data["destinations"]) > 0
@@ -40,7 +42,7 @@ class TestDestinationEndpoints:
         assert len(data["destinations"]) <= 2
         assert data["page"] == 1
         assert data["size"] == 2
-        assert "total_pages" in data
+        assert "total_pages" not in data
         assert "has_more" in data
     
     def test_list_destinations_invalid_page(self, client, sample_flights):

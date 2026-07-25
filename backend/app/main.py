@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import check_db_connection
 from app.api.router import api_router
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.schemas.flight import ErrorResponse
 
 # Configure structured logging
@@ -42,7 +43,23 @@ async def lifespan(app: FastAPI):
     if not check_db_connection():
         logger.error("Database connection failed during startup")
         raise RuntimeError("Database connection failed")
-    
+
+    # Create/migrate the AI counter + event tables ONCE, here.
+    # These blocks ALTER tables (AccessExclusiveLock); running them per request let two
+    # gunicorn workers deadlock against each other while serving the admin dashboard.
+    # run_ddl serialises workers via a Postgres advisory lock.
+    try:
+        from app.database import engine
+        from app.services.analytics import ensure_events_table
+        from app.services.ratelimit import ensure_tables
+
+        ensure_tables(engine)
+        ensure_events_table(engine)
+    except Exception as exc:
+        # Non-fatal: the tables normally already exist, and the API must still serve
+        # flight data if only the AI-search bookkeeping is unavailable.
+        logger.warning("schema initialisation failed", error=str(exc))
+
     logger.info("Application startup complete")
     
     yield
@@ -51,15 +68,31 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Israel Flights API")
 
 
-# Create FastAPI application
+# Create FastAPI application.
+# The OpenAPI schema enumerates every route, query parameter and response model, so it
+# is not published unless ENABLE_API_DOCS is explicitly set.
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
     description=settings.api_description,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    docs_url="/docs" if settings.enable_api_docs else None,
+    redoc_url="/redoc" if settings.enable_api_docs else None,
+    openapi_url="/openapi.json" if settings.enable_api_docs else None,
+)
+
+# --- Rate limiting -----------------------------------------------------------------
+# The row caps bound the cost of ONE request; this bounds requests per client per minute.
+# Applied as middleware so it covers every route, including ones added later, rather
+# than requiring an opt-in decorator per endpoint.
+#
+# /health is exempt so platform uptime probes cannot be starved by other traffic sharing
+# an address. It is a cheap endpoint, so the trade is small.
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=settings.rate_limit_per_minute,
+    window_seconds=60,
+    exempt_paths={"/health"},
 )
 
 # Add CORS middleware

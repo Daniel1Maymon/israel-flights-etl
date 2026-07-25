@@ -142,8 +142,10 @@ celerybeat.pid
 !.env.prod.example
 .envrc
 .venv
+.venv*/
 env/
 venv/
+venv*/
 ENV/
 env.bak/
 venv.bak/
@@ -216,14 +218,10 @@ lambda_package.zip
 lambda_function_aws.py
 lambda_function.py.backup
 
-
-*.csv
-*.json
-
 # Frontend build artifacts
-frontend/dist/
-frontend/node_modules/
-frontend/.vite/
+dist/
+node_modules/
+.vite/
 
 # Airflow logs and data
 airflow/airflow-data/logs/
@@ -256,11 +254,26 @@ download_*.py
 * 2.*
 * 2
 
-# Data files (should be in data directories)
-*.csv
-*.json
+# Data files.
+# Ignored by LOCATION, not by extension: *.json is the dominant config format
+# (tsconfig, package-lock, railway.json, ...) and blanket-ignoring it silently
+# drops real files. Data lives in known directories -- name those instead.
+data/
+airflow/data/files/
+**/exports/
+
+# Raw dataset dumps, wherever they land
 flights_data_*.csv
 flights_data_*.json
+*.csv
+!**/tests/fixtures/*.csv
+
+# Editor / tooling local state.
+# These used to be hidden only as a side effect of the blanket *.json rule,
+# so they are now ignored deliberately.
+.vscode/
+.cursor/settings.json
+.claude/settings.local.json
 
 # Log files
 *.log

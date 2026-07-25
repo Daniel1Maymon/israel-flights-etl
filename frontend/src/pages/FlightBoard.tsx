@@ -136,7 +136,7 @@ const FlightBoard = () => {
     date_to: appliedFilters.dateTo || undefined,
   };
 
-  const { flights, total, loading, error, lastUpdated } = useFlightBoardSSE(sseParams, isPaused);
+  const { flights, total, truncated, loading, error, lastUpdated } = useFlightBoardSSE(sseParams, isPaused);
 
   // Fetch filter options whenever tab changes
   useEffect(() => {
@@ -247,7 +247,7 @@ const FlightBoard = () => {
                 {t('board.lastUpdated')} <span className="font-mono font-semibold text-foreground">{formattedLastUpdated}</span>
                 {total > 0 && (
                   <span className="ms-2 text-xs text-muted-foreground">
-                    ({total} {tab === 'A' ? t('board.arrivals') : t('board.departures')})
+                    ({truncated ? `${total}+` : total} {tab === 'A' ? t('board.arrivals') : t('board.departures')})
                   </span>
                 )}
               </span>

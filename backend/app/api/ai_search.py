@@ -22,10 +22,9 @@ from app.config import settings
 from app.database import engine, get_db
 from app.schemas.ai_search import AISearchRequest, AISearchResponse
 from app.services.ai_search import answer_question
-from app.services.analytics import ensure_events_table, record_event
+from app.services.analytics import record_event
 from app.services.ratelimit import (
     check_and_increment_user,
-    ensure_tables,
     is_over_budget,
     make_user_key,
     record_tokens,
@@ -34,18 +33,8 @@ from app.services.ratelimit import (
 logger = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/ai-search", tags=["ai-search"])
 
-_tables_ready = False
-
-
-def _ensure_ready() -> None:
-    global _tables_ready
-    if not _tables_ready:
-        try:
-            ensure_tables(engine)
-            ensure_events_table(engine)
-        except Exception as e:  # non-fatal; tables usually already exist
-            logger.warning("ensure_tables failed", error=str(e))
-        _tables_ready = True
+# Table creation moved to app.main's lifespan. Doing it lazily here meant DDL ran on
+# the request path, where concurrent workers deadlocked on ai_events (see schema_init).
 
 
 def _client_ip(request: Request) -> str | None:
@@ -87,7 +76,6 @@ async def ai_search(
     response: Response,
     db: Session = Depends(get_db),
 ) -> AISearchResponse:
-    _ensure_ready()
     started = time.perf_counter()
 
     question = (payload.question or "").strip()
