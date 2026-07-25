@@ -6,6 +6,7 @@ import {
   Line,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -220,7 +221,14 @@ export default function Admin() {
                         <XAxis dataKey="reason" fontSize={11} tickMargin={8} />
                         <YAxis fontSize={11} allowDecimals={false} width={32} />
                         <Tooltip />
-                        <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                          {m.refusals_by_reason.map((entry) => (
+                            <Cell
+                              key={entry.reason}
+                              fill={entry.reason === "error" ? "#ef4444" : "hsl(var(--primary))"}
+                            />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   )}
