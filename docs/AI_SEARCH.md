@@ -95,18 +95,30 @@ api/ai_search.py — any refusal gets refusal_text.py's generic answer, then ai_
 answer + rows  →  rendered by AISearch.tsx (frontend)
 ```
 
-### Two things a user can be shown
+### What a user can be shown
 
-An answer built from the data, or one generic sentence — there is no third. Every refusal takes the
-same wording, in the language the question was asked in (`services/refusal_text.py`):
+An answer built from the data, or one of two sentences (`services/refusal_text.py`), always in the
+language the question was asked in. Nothing else — no path returns a null or blank answer, because
+the text is attached at the endpoint, the one seam every refusal passes through. What `ai_events`
+stores is exactly what the user read.
+
+**The generic refusal**, for `off_domain` · `no_data` · `unsupported` · `budget` · `error`:
 
 > I don't have data that answers that. You can ask about flights at Ben Gurion — airlines,
 > punctuality, delays, cancellations and destinations.
 
-`reason` (`off_domain` · `no_data` · `unsupported` · `limit` · `budget` · `error`) still separates
-them for the admin dashboard and metrics; the distinction is ours, not the asker's. The text is
-attached at the endpoint — the one seam every refusal passes through — so no path can return a null
-or blank answer, and what `ai_events` stores is exactly what the user read.
+Those five differ in ways that matter to our metrics — `reason` records which, and the admin
+dashboard shows it — but not to the person asking; "unsupported" instead of "no data" gives them
+nothing to do differently.
+
+**The cap notice**, for `limit` alone:
+
+> You've used today's 10 questions. The limit resets tomorrow — please come back then, or use the
+> destination search in the meantime.
+
+This is the one refusal where the next step differs: the data exists and they get it tomorrow.
+Under the generic wording a capped visitor concludes the product is empty and doesn't return. The
+number is read from `AI_DAILY_LIMIT_PER_USER` at call time, so it cannot contradict the setting.
 
 ### Who counts as one user
 

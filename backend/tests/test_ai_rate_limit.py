@@ -18,7 +18,7 @@ from app.config import settings
 from app.main import app
 from app.schemas.ai_search import AISearchResponse
 from app.services.ratelimit import check_and_increment_user, make_user_key
-from app.services.refusal_text import _GENERIC
+from app.services.refusal_text import _GENERIC, limit_text
 
 
 class _Req:
@@ -100,15 +100,15 @@ def test_the_cap_trips_on_the_question_after_the_limit(count_after, allowed):
 
 @pytest.mark.parametrize(
     "question, expected",
-    [("how punctual is El Al?", _GENERIC["en"]), ("כמה אל על מדייקת?", _GENERIC["he"])],
+    [("how punctual is El Al?", limit_text("en")), ("כמה אל על מדייקת?", limit_text("he"))],
 )
-def test_over_limit_user_is_told_something(question, expected):
+def test_a_capped_user_is_told_they_are_capped(question, expected):
     """
-    The refusal carries text — in the asker's language — and it is the generic one.
+    The cap says so, in the asker's language — it does not hide behind the generic refusal.
 
-    A limit refusal used to have its own wording. It doesn't any more: the user sees one string for
-    every refusal, and `reason` keeps the distinction for analytics. This test exists because that
-    collapse is easy to undo by accident.
+    Under the generic wording ("I don't have data that answers that") a capped visitor concludes
+    the product is empty and does not return. The data exists; they get it tomorrow. This is the
+    one refusal whose next step differs, and the only one with its own words.
     """
     with patch("app.api.ai_search.is_over_budget", return_value=False), patch(
         "app.api.ai_search.check_and_increment_user", return_value=(False, 11)
@@ -120,8 +120,15 @@ def test_over_limit_user_is_told_something(question, expected):
     assert r["refused"] is True
     assert r["reason"] == "limit"
     assert r["answer"] == expected
+    assert r["answer"] not in _GENERIC.values(), "the cap must not read as 'we have no data'"
     assert r["rows"] == [] and r["columns"] == []
     never_called.assert_not_called()  # no LLM tokens spent on a capped user
+
+
+def test_the_cap_notice_quotes_the_configured_number():
+    """A hard-coded number would go stale the first time an environment overrides the setting."""
+    for lang in ("en", "he"):
+        assert str(settings.ai_daily_limit_per_user) in limit_text(lang)
 
 
 def test_the_capped_request_is_still_recorded():
@@ -133,7 +140,7 @@ def test_the_capped_request_is_still_recorded():
 
     kwargs = rec.call_args.kwargs
     assert kwargs["refused"] is True and kwargs["reason"] == "limit"
-    assert kwargs["answer"] == _GENERIC["en"]
+    assert kwargs["answer"] == limit_text("en")
     assert kwargs["tokens"] == 0
 
 
