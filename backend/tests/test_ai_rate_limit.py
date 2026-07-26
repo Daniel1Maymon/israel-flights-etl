@@ -13,11 +13,20 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.ai_search import _client_ip
 from app.config import settings
 from app.main import app
 from app.schemas.ai_search import AISearchResponse
-from app.services.ratelimit import check_and_increment_user
+from app.services.ratelimit import check_and_increment_user, make_user_key
 from app.services.refusal_text import _GENERIC
+
+
+class _Req:
+    """Minimal stand-in for Request: the header and the socket peer are all _client_ip reads."""
+
+    def __init__(self, xff: str | None = None, peer: str | None = "203.0.113.7") -> None:
+        self.headers = {"x-forwarded-for": xff} if xff else {}
+        self.client = type("C", (), {"host": peer})() if peer else None
 
 
 class _FakeSession:
@@ -37,6 +46,45 @@ class _FakeSession:
 
     def commit(self) -> None:
         pass
+
+
+def test_the_same_ip_is_one_identity_whatever_the_cookie_says():
+    """
+    The cap counts IPs. Cookies used to be mixed in, and that is exactly why it never fired: the
+    cookie is SameSite=Lax across two sites, so it never came back and every request looked new.
+    """
+    assert make_user_key("203.0.113.7", "cookie-a") == make_user_key("203.0.113.7", "cookie-b")
+    assert make_user_key("203.0.113.7", None) == make_user_key("203.0.113.7", "anything")
+    assert make_user_key("203.0.113.7", "c") != make_user_key("198.51.100.4", "c")
+    assert "203.0.113.7" not in make_user_key("203.0.113.7", "c")  # hashed, never stored raw
+
+
+def test_without_an_ip_the_cookie_still_separates_callers():
+    """No IP at all (a test client, an odd proxy) must not merge everyone into one bucket."""
+    assert make_user_key(None, "cookie-a") != make_user_key(None, "cookie-b")
+
+
+# Real public addresses, not the 203.0.113.x documentation range: Python's ipaddress counts the
+# TEST-NET blocks as private, so using them here would test nothing.
+@pytest.mark.parametrize(
+    "xff, expected, why",
+    [
+        ("8.8.8.8", "8.8.8.8", "single proxy hop"),
+        ("1.1.1.1, 8.8.8.8", "8.8.8.8", "client-supplied hop is ignored"),
+        ("8.8.8.8, 10.0.0.8", "8.8.8.8", "internal hop skipped, real client kept"),
+        ("8.8.8.8, 10.0.0.8, 172.16.0.2", "8.8.8.8", "several internal hops skipped"),
+        ("not-an-ip, 8.8.8.8", "8.8.8.8", "garbage hop skipped"),
+        ("1.1.1.1, 8.8.8.8, 10.0.0.8", "8.8.8.8", "spoof left, proxy right, internal last"),
+        ("10.0.0.8", "9.9.9.9", "all hops private -> socket peer"),
+        (None, "9.9.9.9", "no header -> socket peer"),
+    ],
+)
+def test_the_client_ip_cannot_be_chosen_by_the_client(xff, expected, why):
+    """
+    A spoofable IP is a cap that can be walked around by resending a header, so the rightmost
+    PUBLIC address wins: proxies append, so the truth is always right of anything the caller wrote.
+    """
+    assert _client_ip(_Req(xff, peer="9.9.9.9")) == expected, why
 
 
 @pytest.mark.parametrize(

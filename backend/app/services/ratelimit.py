@@ -42,8 +42,20 @@ def ensure_tables(engine: Engine) -> None:
 
 
 def make_user_key(client_ip: str | None, cookie_id: str | None) -> str:
-    """Stable, privacy-preserving identity key — hash of IP + cookie (raw IP never stored)."""
-    raw = f"{client_ip or ''}|{cookie_id or ''}"
+    """
+    Identity for the daily cap: the client IP, hashed (the raw IP is never stored).
+
+    It used to be IP + cookie, which cancelled the cap out entirely. The cookie is set
+    SameSite=Lax and the frontend and API are different sites, so the browser never sends it back
+    on the API call — every request arrived cookie-less, got a fresh uid, and hashed to a key that
+    had never been seen. The counter therefore read 1 forever.
+
+    IP alone is the weaker signal and the one that actually works: a shared NAT means several
+    people draw on one quota, and a phone switching networks gets a fresh one. That is the trade
+    for a cap that exists. Adding the cookie back — as a way to SPLIT a shared IP, never to widen
+    it — is a later step, and needs SameSite=None; Secure first.
+    """
+    raw = client_ip or f"cookie:{cookie_id or ''}"  # no IP (tests, odd proxies): fall back
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

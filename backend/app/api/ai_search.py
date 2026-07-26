@@ -10,6 +10,7 @@ allowed to break the user path.
 """
 from __future__ import annotations
 
+import ipaddress
 import secrets
 import time
 
@@ -39,10 +40,27 @@ router = APIRouter(prefix="/api/v1/ai-search", tags=["ai-search"])
 
 
 def _client_ip(request: Request) -> str | None:
-    """Real client IP: first hop of X-Forwarded-For (Railway proxies), else the socket peer."""
+    """
+    Real client IP: the rightmost public address in X-Forwarded-For, else the socket peer.
+
+    The leftmost entry is whatever the caller put there. Reading that was fine while the IP only
+    labelled analytics, but it is now the key the daily cap counts on, so a client could mint a new
+    identity per request by sending its own header. Each proxy APPENDS the peer it saw, so the real
+    address is always to the right of anything the client wrote.
+
+    Rightmost *public*, not simply rightmost: an extra internal hop would otherwise put a private
+    address last and collapse every visitor into one shared counter — a self-inflicted outage where
+    the eleventh request of the day, from anyone, is refused.
+    """
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        for candidate in reversed([p.strip() for p in xff.split(",") if p.strip()]):
+            try:
+                ip = ipaddress.ip_address(candidate)
+            except ValueError:
+                continue  # garbage hop; keep walking left
+            if not (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local):
+                return candidate
     return request.client.host if request.client else None
 
 
