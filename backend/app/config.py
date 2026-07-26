@@ -138,6 +138,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""                        # OPENAI_API_KEY
     database_url_ro: str = ""                       # DATABASE_URL_RO — read-only rankair_ro role
     ai_daily_limit_per_user: int = 10               # questions per user per day
+    # Proxies between the internet and this app (Railway's edge is one). The visitor's address sits
+    # that many hops from the right of X-Forwarded-For; everything further left is caller-supplied.
+    # Too high and a visitor can spoof their identity, too low and everyone shares the edge's.
+    # Read the live chain from GET /api/v1/admin/whoami before changing it.
+    trusted_proxy_hops: int = 1                     # TRUSTED_PROXY_HOPS
     ai_monthly_budget_tokens: int = 20_000_000      # global monthly token ceiling (~$6-8 Flash)
     ai_max_question_chars: int = 500                # reject longer questions pre-call
     ai_max_rows: int = 50                           # forced LIMIT on all AI queries

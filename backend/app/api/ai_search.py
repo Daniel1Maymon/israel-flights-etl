@@ -39,27 +39,48 @@ router = APIRouter(prefix="/api/v1/ai-search", tags=["ai-search"])
 # the request path, where concurrent workers deadlocked on ai_events (see schema_init).
 
 
+# Headers a CDN or edge sets to the address it saw the browser connect from. Where one exists it
+# beats parsing X-Forwarded-For, because the edge knows the answer and we would be guessing at it.
+_REAL_IP_HEADERS = ("cf-connecting-ip", "true-client-ip", "x-real-ip")
+
+
+def _usable(candidate: str) -> str | None:
+    """A routable address, or None for garbage, private hops and loopback."""
+    try:
+        ip = ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
+    if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+        return None
+    return candidate
+
+
 def _client_ip(request: Request) -> str | None:
     """
-    Real client IP: the rightmost public address in X-Forwarded-For, else the socket peer.
+    The visitor's address — counted against the daily cap, so both halves matter.
 
-    The leftmost entry is whatever the caller put there. Reading that was fine while the IP only
-    labelled analytics, but it is now the key the daily cap counts on, so a client could mint a new
-    identity per request by sending its own header. Each proxy APPENDS the peer it saw, so the real
-    address is always to the right of anything the client wrote.
+    Read the LEFT end and a caller can mint a new identity per request by sending their own
+    X-Forwarded-For. Read the right end and you get the last proxy that touched the request, which
+    every visitor shares: this shipped, and Railway's edge (152.233.x.x) became a single bucket that
+    all traffic drained, refusing real users at question eleven.
 
-    Rightmost *public*, not simply rightmost: an extra internal hop would otherwise put a private
-    address last and collapse every visitor into one shared counter — a self-inflicted outage where
-    the eleventh request of the day, from anyone, is refused.
+    Neither end is the answer. Each proxy appends the peer it saw, so the browser's address sits a
+    FIXED number of hops from the right — one per proxy in front of the app. TRUSTED_PROXY_HOPS says
+    how many, anything further left is caller-supplied and ignored. GET /api/v1/admin/whoami prints
+    the live chain to set it from, rather than from a guess about the platform's topology.
     """
+    for header in _REAL_IP_HEADERS:
+        value = (request.headers.get(header) or "").strip()
+        if value and _usable(value):
+            return value
+
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        for candidate in reversed([p.strip() for p in xff.split(",") if p.strip()]):
-            try:
-                ip = ipaddress.ip_address(candidate)
-            except ValueError:
-                continue  # garbage hop; keep walking left
-            if not (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local):
+        chain = [p.strip() for p in xff.split(",") if p.strip()]
+        # Index of the browser: as many hops from the right as there are proxies in front of us.
+        start = max(0, len(chain) - 1 - settings.trusted_proxy_hops)
+        for candidate in reversed(chain[: start + 1]):
+            if _usable(candidate):
                 return candidate
     return request.client.host if request.client else None
 

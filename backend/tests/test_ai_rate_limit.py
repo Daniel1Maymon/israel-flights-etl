@@ -22,10 +22,14 @@ from app.services.refusal_text import _GENERIC, limit_text
 
 
 class _Req:
-    """Minimal stand-in for Request: the header and the socket peer are all _client_ip reads."""
+    """Minimal stand-in for Request: headers and the socket peer are all _client_ip reads."""
 
-    def __init__(self, xff: str | None = None, peer: str | None = "203.0.113.7") -> None:
-        self.headers = {"x-forwarded-for": xff} if xff else {}
+    def __init__(
+        self, xff: str | None = None, peer: str | None = "203.0.113.7", **headers: str
+    ) -> None:
+        self.headers = {k.replace("_", "-"): v for k, v in headers.items()}
+        if xff:
+            self.headers["x-forwarded-for"] = xff
         self.client = type("C", (), {"host": peer})() if peer else None
 
 
@@ -66,25 +70,47 @@ def test_without_an_ip_the_cookie_still_separates_callers():
 
 # Real public addresses, not the 203.0.113.x documentation range: Python's ipaddress counts the
 # TEST-NET blocks as private, so using them here would test nothing.
+# 5.5.5.5 plays the visitor, 152.233.13.166 the platform edge (the address that really appeared),
+# 1.1.1.1 whatever a caller forged. Default TRUSTED_PROXY_HOPS is 1.
 @pytest.mark.parametrize(
     "xff, expected, why",
     [
-        ("8.8.8.8", "8.8.8.8", "single proxy hop"),
-        ("1.1.1.1, 8.8.8.8", "8.8.8.8", "client-supplied hop is ignored"),
-        ("8.8.8.8, 10.0.0.8", "8.8.8.8", "internal hop skipped, real client kept"),
-        ("8.8.8.8, 10.0.0.8, 172.16.0.2", "8.8.8.8", "several internal hops skipped"),
-        ("not-an-ip, 8.8.8.8", "8.8.8.8", "garbage hop skipped"),
-        ("1.1.1.1, 8.8.8.8, 10.0.0.8", "8.8.8.8", "spoof left, proxy right, internal last"),
-        ("10.0.0.8", "9.9.9.9", "all hops private -> socket peer"),
+        ("5.5.5.5, 152.233.13.166", "5.5.5.5", "visitor sits one hop left of the edge"),
+        ("1.1.1.1, 5.5.5.5, 152.233.13.166", "5.5.5.5", "forged entry left of the visitor ignored"),
+        ("5.5.5.5", "5.5.5.5", "chain shorter than the hop count -> the only entry"),
+        ("5.5.5.5, 10.0.0.8", "5.5.5.5", "internal hop, then walk left to a routable address"),
+        ("not-an-ip, 5.5.5.5, 152.233.13.166", "5.5.5.5", "garbage entry ignored"),
+        ("10.0.0.8", "9.9.9.9", "nothing routable -> socket peer"),
         (None, "9.9.9.9", "no header -> socket peer"),
     ],
 )
-def test_the_client_ip_cannot_be_chosen_by_the_client(xff, expected, why):
+def test_the_visitor_is_read_a_fixed_distance_from_the_right(xff, expected, why):
     """
-    A spoofable IP is a cap that can be walked around by resending a header, so the rightmost
-    PUBLIC address wins: proxies append, so the truth is always right of anything the caller wrote.
+    Neither end of X-Forwarded-For is the visitor.
+
+    The left end is caller-supplied, so trusting it hands out free identities. The right end is the
+    last proxy, which every visitor shares — reading that put all traffic on the platform edge's
+    address and refused real users at question eleven. The browser is a fixed number of hops from
+    the right: one per proxy in front of the app.
     """
     assert _client_ip(_Req(xff, peer="9.9.9.9")) == expected, why
+
+
+def test_an_edge_supplied_client_ip_header_wins():
+    """A CDN that states the address it saw is better evidence than counting hops ourselves."""
+    req = _Req("1.1.1.1, 152.233.13.166", peer="9.9.9.9", cf_connecting_ip="5.5.5.5")
+    assert _client_ip(req) == "5.5.5.5"
+    # ...but not when it holds something unroutable — fall back to the chain rather than trust it.
+    assert _client_ip(_Req("5.5.5.5, 152.233.13.166", x_real_ip="10.0.0.1")) == "5.5.5.5"
+
+
+def test_hop_count_is_configurable():
+    """Two proxies in front means the visitor is two from the right, not one."""
+    chain = "1.1.1.1, 5.5.5.5, 152.233.13.166, 152.233.13.167"
+    with patch.object(settings, "trusted_proxy_hops", 2):
+        assert _client_ip(_Req(chain)) == "5.5.5.5"
+    with patch.object(settings, "trusted_proxy_hops", 1):
+        assert _client_ip(_Req(chain)) == "152.233.13.166"  # what one-hop-too-few looks like
 
 
 @pytest.mark.parametrize(
