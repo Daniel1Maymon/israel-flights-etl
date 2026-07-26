@@ -13,6 +13,7 @@ from app.config import settings
 from app.schemas.ai_search import AISearchResponse
 from app.services.ai_query_handlers import NoQueryHandlerMatch, run_query_handler
 from app.services.ai_db import get_data_window, run_readonly
+from app.services.destination_resolver import get_vocabulary, resolve as resolve_destination
 from app.services.llm_tasks import LLMTasks
 from app.services.sql_guard import SqlGuardError, validate_and_prepare
 
@@ -57,6 +58,8 @@ _PUBLIC_LABELS = {
     # handler-defined aliases
     "destination": "Destination",
     "total_flights": "Total Flights",
+    "total_airlines": "Total Airlines",
+    "total_destinations": "Total Destinations",
     "on_time_pct": "On-Time %",
     "cancel_pct": "Cancelled %",
     "avg_delay_minutes": "Avg Delay (minutes)",
@@ -150,9 +153,26 @@ def answer_question(question: str) -> tuple[AISearchResponse, int]:
     if not intent.valid:
         return AISearchResponse(refused=True, reason="off_domain"), tokens
 
-    # 2) run: reviewed query handler first, else guarded generated-SQL fallback
+    # 2) resolve the named destination against the data BEFORE aggregating.
+    #
+    # Skipping this is what produced the two opposite failures: a real place the data files under
+    # another name ("כרתים" -> HERAKLION) was reported as having no flights, while an invented one
+    # contributed nothing to the WHERE clause and got an unfiltered aggregate presented as its
+    # answer. An unresolvable destination is a refusal, never a broader query.
+    payload = intent.model_dump()
+    if payload.get("destination"):
+        # The resolver's tokens are banked like every other step's. They used to be dropped, which
+        # hid them from the monthly budget AND from the dashboard's cost figure.
+        resolved, t = resolve_destination(payload["destination"], get_vocabulary())
+        tokens += t
+        if resolved is None:
+            logger.info("destination not in the data", place=payload["destination"])
+            return _no_data("resolver"), tokens
+        payload["destination_kind"], payload["destination"] = resolved
+
+    # 3) run: reviewed query handler first, else guarded generated-SQL fallback
     try:
-        columns, rows = run_query_handler(intent.model_dump())
+        columns, rows, meta = run_query_handler(payload)
         source = "handler"
     except NoQueryHandlerMatch:
         sql, t = client.generate_sql(question)
@@ -162,6 +182,7 @@ def answer_question(question: str) -> tuple[AISearchResponse, int]:
         except SqlGuardError as e:
             logger.warning("fallback sql rejected", error=str(e))
             return AISearchResponse(refused=True, reason="unsupported"), tokens
+        meta = {}
         try:
             columns, rows = run_readonly(safe_sql)
         except Exception as e:  # timeout / db error → generic
@@ -169,16 +190,16 @@ def answer_question(question: str) -> tuple[AISearchResponse, int]:
             return AISearchResponse(refused=True, reason="error"), tokens
         source = "fallback"
 
-    # 3) an empty result is reported, not narrated (see _no_data)
+    # 4) an empty result is reported, not narrated (see _no_data)
     if not rows:
         logger.info("ai search matched no rows", source=source)
         return _no_data(source), tokens
 
-    # 4) format grounded in the returned rows
+    # 5) format grounded in the returned rows
     # Applies to BOTH paths (handler and fallback) and runs before format_answer, so
     # raw column names are never even shown to the LLM that writes the prose answer.
     columns, rows = _to_public_columns(columns, rows)
 
-    answer, t = client.format_answer(question, rows)
+    answer, t = client.format_answer(question, rows, meta)
     tokens += t
     return AISearchResponse(answer=answer, rows=rows, columns=columns, source=source), tokens

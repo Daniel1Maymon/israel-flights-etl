@@ -18,8 +18,9 @@ from app.services.ai_query_handlers import NoQueryHandlerMatch
 
 
 VALID_INTENT = Intent(
-    valid=True, intent="overall", destination=None, airlines=[],
-    region=None, metric="on_time", recovery_bucket=None, sort=None, limit=10,
+    valid=True, intent="overall", destination=None, airlines=[], region=None,
+    metric="on_time", count_of=None, direction=None, recovery_bucket=None,
+    superlative=None, limit=10,
 )
 
 
@@ -36,7 +37,7 @@ class _FakeTasks:
     def generate_sql(self, question):
         return self._sql, 20
 
-    def format_answer(self, question, rows):
+    def format_answer(self, question, rows, meta=None):
         self.formatted = True
         return "some prose", 30
 
@@ -58,7 +59,7 @@ def _run(monkeypatch, *, rows, handler_matches=True, tasks=None):
     def fake_handler(intent):
         if not handler_matches:
             raise NoQueryHandlerMatch("no handler")
-        return (["airline_name"], rows)
+        return (["airline_name"], rows, {})
 
     monkeypatch.setattr(ai_search, "run_query_handler", fake_handler)
     monkeypatch.setattr(ai_search, "run_readonly", lambda sql, params=None: (["airline_name"], rows))
@@ -200,7 +201,7 @@ def test_carrier_recovery_declines_when_no_disruption_is_detectable(recovery, mo
 
 
 def test_carrier_recovery_is_routed_from_the_intent(recovery):
-    cols, rows = recovery.run_query_handler({"intent": "carrier_recovery", "limit": 5})
+    cols, rows, _meta = recovery.run_query_handler({"intent": "carrier_recovery", "limit": 5})
     assert rows and "recovery_pct" in cols
 
 
