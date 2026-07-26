@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
   LineChart,
@@ -47,10 +47,27 @@ type EventRow = {
   ip_questions_today: number | null;
 };
 
+type LLMFlag = {
+  enabled: boolean;
+  updated_at: string | null;
+  note: string | null;
+};
+
 class AuthError extends Error {}
 
 async function authedGet<T>(url: string, token: string): Promise<T> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401) throw new AuthError("unauthorized");
+  if (!res.ok) throw new Error(`request failed: ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function authedPost<T>(url: string, token: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (res.status === 401) throw new AuthError("unauthorized");
   if (!res.ok) throw new Error(`request failed: ${res.status}`);
   return res.json() as Promise<T>;
@@ -71,6 +88,82 @@ function StatCard({ label, value }: { label: string; value: string }) {
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-semibold tabular-nums">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The AI kill switch.
+ *
+ * Green = AI search is answering questions. Red = every question is refused before an LLM is
+ * called, with a message saying the feature is off; the rest of the site is unaffected.
+ *
+ * The colour is read from the server on every load, never from local state: flip it here and the
+ * same dashboard opened on another device must show red too. The DB row is the only truth.
+ */
+function LLMSwitch({ token }: { token: string }) {
+  const queryClient = useQueryClient();
+
+  const flagQ = useQuery({
+    queryKey: ["admin-llm", token],
+    queryFn: () => authedGet<LLMFlag>(API_ENDPOINTS.ADMIN_LLM, token),
+    retry: false,
+    refetchInterval: 30_000,
+  });
+
+  const setFlag = useMutation({
+    // Sends the state it wants, never "flip": two dashboards open, or one double-click, would
+    // otherwise race on read-then-invert and land on whichever request lost.
+    mutationFn: (enabled: boolean) =>
+      authedPost<LLMFlag>(API_ENDPOINTS.ADMIN_LLM, token, { enabled }),
+    onSuccess: (data) => queryClient.setQueryData(["admin-llm", token], data),
+  });
+
+  const enabled = flagQ.data?.enabled;
+  const busy = flagQ.isLoading || setFlag.isPending;
+
+  const onClick = () => {
+    if (enabled === undefined) return;
+    // Turning it off takes the feature away from every visitor at once. A misclick on the way to
+    // the events table should not be able to do that silently.
+    if (enabled && !window.confirm("Turn AI search OFF for all users?")) return;
+    setFlag.mutate(!enabled);
+  };
+
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
+        <div>
+          <div className="font-medium">AI search</div>
+          <div className="text-sm text-muted-foreground">
+            {enabled === undefined
+              ? "Reading state…"
+              : enabled
+                ? "Answering questions — LLM calls are being made."
+                : "Off — every question is refused before any LLM call. No tokens are spent."}
+          </div>
+          {flagQ.data?.updated_at && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Last changed {flagQ.data.updated_at}
+              {flagQ.data.note ? ` · ${flagQ.data.note}` : ""}
+            </div>
+          )}
+          {setFlag.isError && (
+            <div className="text-xs text-red-500 mt-1">Could not change it. Try again.</div>
+          )}
+        </div>
+
+        <button
+          onClick={onClick}
+          disabled={busy || enabled === undefined}
+          aria-pressed={!!enabled}
+          className={`shrink-0 rounded-md px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:opacity-50 ${
+            enabled ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
+          }`}
+        >
+          {busy ? "Working…" : enabled ? "ON — click to turn off" : "OFF — click to turn on"}
+        </button>
       </CardContent>
     </Card>
   );
@@ -171,6 +264,8 @@ export default function Admin() {
             Log out
           </button>
         </div>
+
+        <LLMSwitch token={token} />
 
         {metricsQ.isLoading && <p className="text-muted-foreground">Loading…</p>}
 

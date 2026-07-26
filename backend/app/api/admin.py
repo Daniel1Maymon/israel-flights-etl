@@ -1,23 +1,35 @@
 """
-Admin analytics endpoints — GET /api/v1/admin/metrics and /api/v1/admin/events.
+Admin endpoints — GET /api/v1/admin/metrics, /events, /whoami, and the LLM kill switch at /llm.
 
 Token-gated (ADMIN_TOKEN). These expose real users' questions, so they must never be public:
-if ADMIN_TOKEN is unset, every request is rejected. Read-only aggregates over ai_events.
+if ADMIN_TOKEN is unset, every request is rejected. Everything here was read-only until the kill
+switch; POST /llm is the one write, and the same gate covers it because the dependency is declared
+on the router rather than per-endpoint.
 """
 from __future__ import annotations
 
+import secrets
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.services.ai_flags import get_llm_flag, set_llm_enabled
 from app.services.analytics import get_metrics, get_recent_events
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:
     """Fail closed: no token configured -> deny; otherwise require `Authorization: Bearer <token>`."""
     expected = settings.admin_token
-    if not expected or authorization != f"Bearer {expected}":
+    if not expected:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
+    # compare_digest, not `!=`: a plain string comparison returns as soon as two bytes differ, so
+    # how long the reject takes leaks how much of the token was right, and the secret can be
+    # recovered a character at a time. The detail is never more than "unauthorized" for the same
+    # reason -- an error that says what was expected hands over the thing it is protecting.
+    if not secrets.compare_digest(authorization or "", f"Bearer {expected}"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
 
 
@@ -42,6 +54,36 @@ def events(
     db: Session = Depends(get_db),
 ) -> dict:
     return {"events": get_recent_events(db, limit)}
+
+
+class LLMFlagUpdate(BaseModel):
+    """
+    The state to set, never a flip.
+
+    A `/toggle` that read-then-inverted would race: two dashboards open, or one double-click, and
+    the two requests read the same value and both write its opposite, landing on whichever lost.
+    Sending the wanted state makes the button idempotent — pressing "off" twice leaves it off.
+    """
+    enabled: bool
+    note: str | None = Field(default=None, max_length=200, description="Why, for the audit trail")
+
+
+@router.get("/llm")
+def llm_flag(db: Session = Depends(get_db)) -> dict:
+    """Current state of the AI kill switch — what the dashboard button colours itself from."""
+    return get_llm_flag(db)
+
+
+@router.post("/llm")
+def set_llm_flag(payload: LLMFlagUpdate, db: Session = Depends(get_db)) -> dict:
+    """
+    Turn AI search on or off for everyone, immediately.
+
+    Off means the /ai-search endpoint refuses before it reaches an LLM provider: no tokens are
+    spent, and the visitor is told the feature is off rather than that we have no data. The rest of
+    the site — flight board, rankings, destination search — is untouched.
+    """
+    return set_llm_enabled(db, payload.enabled, payload.note)
 
 
 @router.get("/whoami")

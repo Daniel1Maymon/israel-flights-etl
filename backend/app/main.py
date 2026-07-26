@@ -50,11 +50,13 @@ async def lifespan(app: FastAPI):
     # run_ddl serialises workers via a Postgres advisory lock.
     try:
         from app.database import engine
+        from app.services.ai_flags import ensure_flags_table
         from app.services.analytics import ensure_events_table
         from app.services.ratelimit import ensure_tables
 
         ensure_tables(engine)
         ensure_events_table(engine)
+        ensure_flags_table(engine)
     except Exception as exc:
         # Non-fatal: the tables normally already exist, and the API must still serve
         # flight data if only the AI-search bookkeeping is unavailable.

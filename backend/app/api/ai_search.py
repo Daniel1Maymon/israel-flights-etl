@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import engine, get_db
 from app.schemas.ai_search import AISearchRequest, AISearchResponse
+from app.services.ai_flags import is_llm_enabled
 from app.services.ai_search import answer_question
 from app.services.analytics import record_event
 from app.services.refusal_text import refusal_answer
@@ -87,6 +88,16 @@ def _client_ip(request: Request) -> str | None:
 
 def _resolve(db: Session, question: str, user_key: str) -> tuple[AISearchResponse, int]:
     """Run the guards + orchestrator. Returns (response, tokens_used)."""
+    # Manual kill switch, first rung on the ladder (see services/ai_flags.py). Two reasons it sits
+    # above everything else rather than beside the budget check:
+    #   - above the daily cap, so a visitor is not charged one of their ten questions for a feature
+    #     that is switched off and answered nobody;
+    #   - above the length check, so a blank or over-long question sent while the feature is off is
+    #     told THAT, instead of "I don't have data that answers that" — which describes a different
+    #     system state and sends the user away for the wrong reason.
+    if not is_llm_enabled(db):
+        return AISearchResponse(refused=True, reason="llm_off"), 0
+
     if not question or len(question) > settings.ai_max_question_chars:
         return AISearchResponse(refused=True, reason="off_domain"), 0
 
@@ -134,8 +145,8 @@ async def ai_search(
     result, tokens = _resolve(db, question, user_key)
 
     # Every refusal leaves here with the words the user will actually read. This is the single seam
-    # all of them pass through (length check, budget, per-user limit, off-domain, empty result,
-    # internal error), so no path can return a null answer and no path needs its own wording.
+    # all of them pass through (kill switch, length check, budget, per-user limit, off-domain,
+    # empty result, internal error), so no path can return a null answer or need its own wording.
     # Doing it here rather than in answer_question keeps the service layer's contract untouched:
     # there, an empty result is still a typed refusal with answer=None (see test_ai_search_no_data).
     # Two outcomes only, never a third: a real answer from the data, or this one. A blank string

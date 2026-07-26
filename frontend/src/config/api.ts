@@ -22,6 +22,8 @@ export const API_ENDPOINTS = {
   AI_SEARCH: `${API_BASE_URL}/api/v1/ai-search`,
   ADMIN_METRICS: `${API_BASE_URL}/api/v1/admin/metrics`,
   ADMIN_EVENTS: `${API_BASE_URL}/api/v1/admin/events`,
+  /** AI kill switch. GET reads the flag, POST {enabled} sets it. Both require the admin token. */
+  ADMIN_LLM: `${API_BASE_URL}/api/v1/admin/llm`,
   STATS_OVERVIEW: `${API_BASE_URL}/api/v1/stats/overview`,
   INSIGHTS_MONTHLY: `${API_BASE_URL}/api/v1/insights/monthly-by-nationality`,
   INSIGHTS_WEEKDAY: `${API_BASE_URL}/api/v1/insights/by-weekday`,

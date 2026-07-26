@@ -136,7 +136,9 @@ def test_a_capped_user_is_told_they_are_capped(question, expected):
     the product is empty and does not return. The data exists; they get it tomorrow. This is the
     one refusal whose next step differs, and the only one with its own words.
     """
-    with patch("app.api.ai_search.is_over_budget", return_value=False), patch(
+    with patch("app.api.ai_search.is_llm_enabled", return_value=True), patch(
+        "app.api.ai_search.is_over_budget", return_value=False
+    ), patch(
         "app.api.ai_search.check_and_increment_user", return_value=(False, 11)
     ), patch("app.api.ai_search.record_event"), patch(
         "app.api.ai_search.answer_question"
@@ -159,7 +161,9 @@ def test_the_cap_notice_quotes_the_configured_number():
 
 def test_the_capped_request_is_still_recorded():
     """A blocked question is traffic worth seeing in the dashboard, with the text the user got."""
-    with patch("app.api.ai_search.is_over_budget", return_value=False), patch(
+    with patch("app.api.ai_search.is_llm_enabled", return_value=True), patch(
+        "app.api.ai_search.is_over_budget", return_value=False
+    ), patch(
         "app.api.ai_search.check_and_increment_user", return_value=(False, 11)
     ), patch("app.api.ai_search.record_event") as rec:
         TestClient(app).post("/api/v1/ai-search", json={"question": "anything"})
@@ -172,9 +176,9 @@ def test_the_capped_request_is_still_recorded():
 
 def test_budget_kill_switch_also_answers_in_words():
     """Same contract for the global budget refusal — no path returns a null answer."""
-    with patch("app.api.ai_search.is_over_budget", return_value=True), patch(
-        "app.api.ai_search.record_event"
-    ):
+    with patch("app.api.ai_search.is_llm_enabled", return_value=True), patch(
+        "app.api.ai_search.is_over_budget", return_value=True
+    ), patch("app.api.ai_search.record_event"):
         r = TestClient(app).post("/api/v1/ai-search", json={"question": "hello"}).json()
 
     assert (r["refused"], r["reason"], r["answer"]) == (True, "budget", _GENERIC["en"])
@@ -184,7 +188,9 @@ def test_an_answered_question_keeps_its_own_words():
     """The generic text must not leak onto a real answer."""
     stub = AISearchResponse(answer="El Al was on time 36.0% of the time.", rows=[{"a": 1}],
                             columns=["a"], source="handler")
-    with patch("app.api.ai_search.is_over_budget", return_value=False), patch(
+    with patch("app.api.ai_search.is_llm_enabled", return_value=True), patch(
+        "app.api.ai_search.is_over_budget", return_value=False
+    ), patch(
         "app.api.ai_search.check_and_increment_user", return_value=(True, 3)
     ), patch("app.api.ai_search.record_event"), patch(
         "app.api.ai_search.record_tokens"  # the allowed path banks tokens; needs a writable DB

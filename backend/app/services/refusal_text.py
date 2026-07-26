@@ -10,17 +10,18 @@ backend rather than the client (where the text used to be built from `reason`):
   2. One text, one place. The client rendered its own wording per reason; nothing kept those in
      sync with what the backend actually did.
 
-A user can be shown an answer built from the data, or one of two sentences below.
+A user can be shown an answer built from the data, or one of the three sentences below.
 
 The default is the generic one, and nearly every refusal takes it — off-domain, unsupported, empty
 result, budget, internal error alike. Those differ in ways that matter to our metrics (`reason`
 records which) and not to the person asking; telling a visitor "unsupported" rather than "no data"
 gives them nothing to do differently.
 
-The daily cap is the exception, because there the user's next step IS different: the data they
-asked for exists and they will get it tomorrow. Under the generic wording a capped visitor reads
-"I don't have data that answers that" and concludes the product is empty, which is both false and
-the opposite of what we want them to believe.
+Two refusals get their own words, and the test is the same both times: the user's next step is
+different, so the generic sentence would actively mislead them. The daily cap (the data exists;
+they get it tomorrow) and the manual kill switch (the feature works; an admin turned it off to hold
+spend down). Under the generic wording either visitor reads "I don't have data that answers that",
+concludes the product is empty, and does not come back.
 """
 from __future__ import annotations
 
@@ -64,7 +65,31 @@ def limit_text(lang: str) -> str:
     )
 
 
+def off_text(lang: str) -> str:
+    """
+    The kill-switch notice — the second exception to the generic reply, for the same reason as the
+    cap: the user's next step differs.
+
+    The data exists and the feature works; an admin has turned it off to hold token spend down. A
+    visitor told "I don't have data that answers that" concludes the product is empty and does not
+    come back, when in fact the answer is "not now, and here is what still works".
+    """
+    if lang == "he":
+        return (
+            'הצ\'אט החכם כבוי כרגע בגלל צריכת טוקנים. הוא יחזור בקרוב — '
+            'בינתיים אפשר להשתמש בחיפוש היעדים, בדירוגי חברות התעופה ובלוח הטיסות.'
+        )
+    return (
+        "AI chat is off for now because of token usage. It'll be back soon — in the meantime you "
+        "can still use the destination search, the airline rankings and the flight board."
+    )
+
+
 def refusal_answer(reason: str | None, question: str) -> str:
     """The message shown for a refusal, in the language the question was asked in."""
     lang = question_language(question)
-    return limit_text(lang) if reason == "limit" else _GENERIC[lang]
+    if reason == "limit":
+        return limit_text(lang)
+    if reason == "llm_off":
+        return off_text(lang)
+    return _GENERIC[lang]
