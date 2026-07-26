@@ -23,6 +23,7 @@ from app.database import engine, get_db
 from app.schemas.ai_search import AISearchRequest, AISearchResponse
 from app.services.ai_search import answer_question
 from app.services.analytics import record_event
+from app.services.refusal_text import refusal_answer
 from app.services.ratelimit import (
     check_and_increment_user,
     is_over_budget,
@@ -92,6 +93,16 @@ async def ai_search(
     user_key = make_user_key(client_ip, uid)
 
     result, tokens = _resolve(db, question, user_key)
+
+    # Every refusal leaves here with the words the user will actually read. This is the single seam
+    # all of them pass through (length check, budget, per-user limit, off-domain, empty result,
+    # internal error), so no path can return a null answer and no path needs its own wording.
+    # Doing it here rather than in answer_question keeps the service layer's contract untouched:
+    # there, an empty result is still a typed refusal with answer=None (see test_ai_search_no_data).
+    # Two outcomes only, never a third: a real answer from the data, or this one. A blank string
+    # counts as no answer (the LLM occasionally returns one), so it is replaced too.
+    if not (result.answer or "").strip():
+        result.answer = refusal_answer(result.reason, question)
 
     # analytics: one row per request, best-effort (never breaks the user's response). Runs in a
     # threadpool so the blocking country lookup + DB write don't stall the event loop.

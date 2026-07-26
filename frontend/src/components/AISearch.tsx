@@ -92,7 +92,11 @@ export const AISearch = () => {
     return (isHe ? "לא נמצאו טיסות שמתאימות לשאלה." : "No flights in our data match that question.") + range + scope;
   };
 
+  // The backend now sends the refusal wording it recorded in ai_events, so what the user reads and
+  // what the admin dashboard replays are the same string. The maps below stay as a fallback for
+  // responses from an older backend (or a cached deploy) that still send answer: null.
   const refusalText = (result: AISearchResponse) => {
+    if (result.answer) return result.answer;
     if (result.reason === "no_data") return noDataText(result);
     const r = REFUSALS[result.reason || "error"] || REFUSALS.error;
     return isHe ? r.he : r.en;
