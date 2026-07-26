@@ -149,7 +149,13 @@ def get_metrics(db: Session) -> dict[str, Any]:
         text("""
             SELECT
                 COUNT(*)                                                AS total_questions,
-                COUNT(DISTINCT user_key)                                AS unique_users,
+                -- IP first, user_key only for rows written before the ip column existed.
+                -- Counting user_key alone reported one visitor per QUESTION: it hashed IP+cookie,
+                -- and the cookie (SameSite=Lax, different site to the API) never came back, so
+                -- every request carried a brand-new uid. 197 questions read as 155 people.
+                -- Legacy rows still inflate this; they have no IP to fall back to.
+                COUNT(DISTINCT COALESCE(ip, user_key))                  AS unique_users,
+                COUNT(DISTINCT ip) FILTER (WHERE ip IS NOT NULL)        AS unique_ips,
                 COALESCE(SUM(tokens), 0)                                AS total_tokens,
                 COALESCE(AVG(CASE WHEN refused THEN 1.0 ELSE 0.0 END), 0) AS refusal_rate,
                 COALESCE(percentile_cont(0.5)  WITHIN GROUP (ORDER BY latency_ms), 0) AS p50,
@@ -193,6 +199,7 @@ def get_metrics(db: Session) -> dict[str, Any]:
     return {
         "total_questions": int(totals["total_questions"]),
         "unique_users": int(totals["unique_users"]),
+        "unique_ips": int(totals["unique_ips"] or 0),
         "total_tokens": total_tokens,
         "estimated_cost_usd": round(total_tokens / 1_000_000 * COST_PER_1M_TOKENS, 4),
         "refusal_rate": round(float(totals["refusal_rate"]), 4),

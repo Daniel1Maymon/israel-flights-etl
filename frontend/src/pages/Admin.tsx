@@ -20,6 +20,7 @@ const TOKEN_KEY = "rankair_admin_token";
 type Metrics = {
   total_questions: number;
   unique_users: number;
+  unique_ips: number;
   total_tokens: number;
   estimated_cost_usd: number;
   refusal_rate: number;
@@ -177,7 +178,15 @@ export default function Admin() {
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard label="Total questions" value={m.total_questions.toLocaleString()} />
-              <StatCard label="Unique users" value={m.unique_users.toLocaleString()} />
+              {/* Counted by IP. "Unique users" was one-per-question until the cookie identity was
+              replaced, so rows from before the ip column still inflate the headline number —
+              hence the separate, trustworthy count beside it. */}
+          <StatCard
+            label="Unique visitors (by IP)"
+            value={`${m.unique_ips.toLocaleString()}${
+              m.unique_users > m.unique_ips ? ` / ${m.unique_users.toLocaleString()} legacy` : ""
+            }`}
+          />
               <StatCard label="Refusal rate" value={`${(m.refusal_rate * 100).toFixed(1)}%`} />
               <StatCard label="Est. cost" value={`$${m.estimated_cost_usd.toFixed(2)}`} />
               <StatCard label="Total tokens" value={m.total_tokens.toLocaleString()} />
