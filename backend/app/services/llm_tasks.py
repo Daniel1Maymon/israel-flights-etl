@@ -8,9 +8,11 @@ tasks run on Gemini, OpenAI, or any future provider without change.
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from app.config import settings
 from app.schemas.ai_search import Intent
+from app.services.ai_db import get_data_window
 from app.services.llm import LLMProvider, get_provider
 
 _INTERPRET_SYS = (
@@ -25,7 +27,14 @@ _INTERPRET_SYS = (
     "Intents: rank_airlines (rank airlines to a destination or overall), single_airline (one "
     "airline's reliability), head_to_head (compare two airlines), by_destination (one airline "
     "across destinations), overall (all airlines, no destination), by_region (a region such as "
-    "Europe), or other. metric is on_time, cancel, or delay. Extract destination as its ENGLISH "
+    "Europe), carrier_recovery, or other.\n"
+    "carrier_recovery is for questions about airlines SUSPENDING or RESUMING service to Israel "
+    "rather than about their punctuality — 'which airlines haven't come back yet', 'איזה חברות "
+    "עוד לא חזרו לטוס לישראל', 'who stopped flying here', 'which airlines returned', 'who is "
+    "flying again'. Set recovery_bucket to never_returned (still absent), recovered or expanded "
+    "(back to or above previous volume), or partial (back but reduced); default never_returned "
+    "when the question asks who has NOT returned.\n"
+    "metric is on_time, cancel, or delay. Extract destination as its ENGLISH "
     "name (translate Hebrew city/country names to English, e.g. 'ליוון'->'Greece', "
     "'ללונדון'->'London'), up to two airline names as written, and region if present. "
     "For ranking intents set limit to 10 unless the user asks for a specific number."
@@ -34,14 +43,42 @@ _INTERPRET_SYS = (
 _FORMAT_SYS = (
     "You are RankAir. Given the user's question and result rows (JSON), write a concise 3-4 line "
     "answer in the user's language (Hebrew or English). Use ONLY the numbers in the rows; never "
-    "invent figures. If rows are empty, say no data was found. Name the top airline(s) and the "
-    "relevant metric (on-time %, cancellation %, average delay)."
+    "invent figures. Name the airline(s) the rows are about and the metric they carry — on-time %, "
+    "cancellation %, average delay, or for suspension/resumption questions the pre-disruption "
+    "monthly volume and flights in the last 30 days. Rows are never empty here (an empty result is "
+    "handled before you are called), so never say that no data was found."
 )
+
+
+def _data_context() -> str:
+    """
+    Temporal grounding for the SQL prompt — today's date and the table's real coverage window.
+
+    Without it the model writes date-blind SQL: nothing tells it what 'recently' can mean here,
+    that the table also holds FUTURE scheduled flights (so an unqualified query mixes flown and
+    not-yet-flown), or that nothing exists before the window starts. Returns '' when the window
+    can't be read, so a DB hiccup degrades to today's prompt rather than a false claim.
+    """
+    window = get_data_window()
+    if not window:
+        return ""
+    lo, hi = window
+    return (
+        f"Data context: today is {date.today().isoformat()}. `flights` covers scheduled_time from "
+        f"{lo.isoformat()} to {hi.isoformat()} and holds NOTHING outside that range — the later "
+        "part is future scheduled flights, not history. So: for what already happened add "
+        "scheduled_time <= now(); 'recently'/'lately' means scheduled_time >= now() - interval "
+        "'30 days'; 'upcoming' means scheduled_time > now(). Never assume data exists before "
+        f"{lo.isoformat()}. The table lists only flights that are scheduled or flown; it has no "
+        "roster of airlines that once served TLV, so a carrier absent from it yields zero rows "
+        "and no query can surface it. "
+    )
 
 
 def _sql_sys() -> str:
     return (
-        "Translate the question into a SINGLE read-only PostgreSQL SELECT over ONLY the table "
+        _data_context()
+        + "Translate the question into a SINGLE read-only PostgreSQL SELECT over ONLY the table "
         "`flights`. Columns: airline_name, airline_code, direction ('D' departures, 'A' arrivals), "
         "location_en, location_he, location_city_en, country_en, scheduled_time, actual_time, "
         "delay_minutes, status_en, terminal. Rules: SELECT only (no INSERT/UPDATE/DELETE/DDL); "

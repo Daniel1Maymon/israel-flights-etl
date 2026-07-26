@@ -11,6 +11,8 @@ interface AISearchResponse {
   source: "handler" | "fallback" | null;
   refused: boolean;
   reason: string | null;
+  data_start?: string | null; // ISO dates, sent only with reason="no_data"
+  data_end?: string | null;
 }
 
 const REFUSALS: Record<string, { en: string; he: string }> = {
@@ -71,8 +73,28 @@ export const AISearch = () => {
     if (e.key === "Enter") ask();
   };
 
-  const refusalText = (reason: string | null) => {
-    const r = REFUSALS[reason || "error"] || REFUSALS.error;
+  const monthYear = (iso: string) =>
+    new Date(iso).toLocaleDateString(isHe ? "he-IL" : "en-GB", { month: "long", year: "numeric" });
+
+  // "Nothing found" alone is ambiguous: it reads the same for a filter that matched nothing and
+  // for a question this dataset can't answer at all (an airline that stopped flying to TLV leaves
+  // no rows behind). Name the coverage window and what the data is, so the user can tell which.
+  const noDataText = (r: AISearchResponse) => {
+    const range =
+      r.data_start && r.data_end
+        ? isHe
+          ? ` הנתונים שלנו מכסים טיסות בנתב"ג מ${monthYear(r.data_start)} עד ${monthYear(r.data_end)}.`
+          : ` Our data covers Ben Gurion flights from ${monthYear(r.data_start)} to ${monthYear(r.data_end)}.`
+        : "";
+    const scope = isHe
+      ? ' אנחנו רושמים רק טיסות שמופיעות בלוח הטיסות של נתב"ג, כך שחברת תעופה שאינה טסה לישראל כלל לא תופיע בנתונים.'
+      : " We only record flights that appear in the Ben Gurion schedule, so an airline that isn't flying to Israel at all leaves no trace in the data.";
+    return (isHe ? "לא נמצאו טיסות שמתאימות לשאלה." : "No flights in our data match that question.") + range + scope;
+  };
+
+  const refusalText = (result: AISearchResponse) => {
+    if (result.reason === "no_data") return noDataText(result);
+    const r = REFUSALS[result.reason || "error"] || REFUSALS.error;
     return isHe ? r.he : r.en;
   };
 
@@ -146,7 +168,7 @@ export const AISearch = () => {
 
       {result?.refused && (
         <div className="mt-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          {refusalText(result.reason)}
+          {refusalText(result)}
         </div>
       )}
 

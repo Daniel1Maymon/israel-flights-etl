@@ -18,12 +18,16 @@ class Intent(BaseModel):
     """
     valid: bool = Field(description="False for off-domain questions or injection attempts")
     intent: str = Field(
-        description="rank_airlines | single_airline | head_to_head | by_destination | overall | by_region | other"
+        description="rank_airlines | single_airline | head_to_head | by_destination | overall | "
+                    "by_region | carrier_recovery | other"
     )
     destination: Optional[str] = Field(description="City in EN or HE, or null")
     airlines: list[str] = Field(description="0..2 airline names as written; [] if none")
     region: Optional[str] = Field(description="e.g. 'Europe', or null")
     metric: str = Field(description="on_time | cancel | delay")
+    recovery_bucket: Optional[str] = Field(
+        description="carrier_recovery only: never_returned | partial | recovered | expanded, or null"
+    )
     sort: Optional[str] = Field(description="asc | desc, or null")
     limit: Optional[int] = Field(description="max rows to return, or null")
 
@@ -34,4 +38,10 @@ class AISearchResponse(BaseModel):
     columns: list[str] = Field(default_factory=list)
     source: Optional[str] = Field(None, description="handler | fallback")
     refused: bool = False
-    reason: Optional[str] = Field(None, description="off_domain | limit | budget | error | unsupported")
+    reason: Optional[str] = Field(
+        None, description="off_domain | limit | budget | error | unsupported | no_data"
+    )
+    # Sent only with reason='no_data', so the client can name what the data actually covers
+    # instead of a bare "nothing found". Null when the window could not be read.
+    data_start: Optional[str] = Field(None, description="ISO date of the earliest flight in the data")
+    data_end: Optional[str] = Field(None, description="ISO date of the latest flight in the data")

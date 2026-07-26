@@ -13,8 +13,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy.orm import sessionmaker
+
 from app.config import settings
-from app.services.ai_db import run_readonly
+from app.services.ai_db import get_ro_engine, run_readonly
+from app.services.carrier_recovery import compute_carrier_recovery
 from app.services.flight_status import CANCELLED_SQL, NOT_CANCELLED_SQL
 
 # Common metric projection reused by every handler.
@@ -176,7 +179,58 @@ def by_region(intent: dict) -> tuple[list[str], list[dict]]:
     return _run(sql, params)
 
 
+_RECOVERY_BUCKETS = {"never_returned", "partial", "recovered", "expanded"}
+
+
+def carrier_recovery(intent: dict) -> tuple[list[str], list[dict]]:
+    """
+    "Which airlines haven't come back yet?" — answered from the same computation as the /recovery
+    page, never re-implemented here.
+
+    This is the one AI-search question that no SELECT over `flights` can answer, because it is
+    about ABSENCE: a carrier that stopped flying has no rows, so there is nothing for a WHERE
+    clause to match. It needs a baseline (each carrier's own pre-disruption monthly average) to
+    subtract the present from, which is exactly what compute_carrier_recovery builds. Before this
+    handler existed the question fell through to the generated-SQL fallback, which produced valid
+    SQL that matched nothing and answered "no data found".
+
+    Uses the read-only engine like every other AI-search query — the LLM path never gets a
+    read-write session.
+    """
+    bucket = (intent.get("recovery_bucket") or "never_returned").strip().lower()
+    if bucket not in _RECOVERY_BUCKETS:
+        bucket = "never_returned"
+
+    with sessionmaker(bind=get_ro_engine())() as db:
+        data = compute_carrier_recovery(db)
+
+    if not data.get("crisis_window"):
+        # No disruption detectable in the current data — there is no "came back" to report, and a
+        # list built off an invented cutoff would look authoritative while meaning nothing.
+        raise NoQueryHandlerMatch("no disruption window in the data")
+
+    rows = [
+        {
+            "airline_name": c["airline_name"],
+            "baseline_monthly": c["baseline_monthly"],
+            "last30_flights": c["last30_flights"],
+            "recovery_pct": c["recovery_pct"],
+            "return_date": c["return_date"],
+        }
+        for c in data["carriers"]
+        if c["bucket"] == bucket
+    ]
+    # Biggest carriers first: "British Airways hasn't come back" is the answer, "a charter
+    # operator with 60 baseline flights hasn't" is trivia.
+    rows.sort(key=lambda r: r["baseline_monthly"] or 0, reverse=True)
+    rows = rows[: _limit(intent)]
+
+    columns = ["airline_name", "baseline_monthly", "last30_flights", "recovery_pct", "return_date"]
+    return columns, rows
+
+
 _HANDLERS = {
+    "carrier_recovery": carrier_recovery,
     "rank_airlines": rank_airlines,
     "single_airline": single_airline,
     "head_to_head": head_to_head,

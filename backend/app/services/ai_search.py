@@ -12,7 +12,7 @@ import structlog
 from app.config import settings
 from app.schemas.ai_search import AISearchResponse
 from app.services.ai_query_handlers import NoQueryHandlerMatch, run_query_handler
-from app.services.ai_db import run_readonly
+from app.services.ai_db import get_data_window, run_readonly
 from app.services.llm_tasks import LLMTasks
 from app.services.sql_guard import SqlGuardError, validate_and_prepare
 
@@ -60,6 +60,11 @@ _PUBLIC_LABELS = {
     "on_time_pct": "On-Time %",
     "cancel_pct": "Cancelled %",
     "avg_delay_minutes": "Avg Delay (minutes)",
+    # carrier_recovery handler
+    "baseline_monthly": "Flights / Month Before",
+    "last30_flights": "Flights (last 30 days)",
+    "recovery_pct": "Recovery %",
+    "return_date": "Resumed On",
 }
 
 
@@ -117,6 +122,24 @@ def _to_public_columns(
     return public_columns, public_rows
 
 
+def _no_data(source: str) -> AISearchResponse:
+    """
+    Zero rows is not an answer — say so explicitly instead of letting the LLM narrate it.
+
+    Handing empty rows to format_answer produces "no data was found", which reads identically
+    whether the filter genuinely matched nothing or the question is about something this dataset
+    structurally cannot contain (an airline that stopped serving TLV has no rows to find, so the
+    query is doomed however well it is written). The client can't tell those apart from prose, so
+    return a typed reason plus the real coverage window and let it say which. Also skips an LLM
+    call that had nothing to work with.
+    """
+    window = get_data_window()
+    lo, hi = (window[0].isoformat(), window[1].isoformat()) if window else (None, None)
+    return AISearchResponse(
+        refused=True, reason="no_data", source=source, data_start=lo, data_end=hi
+    )
+
+
 def answer_question(question: str) -> tuple[AISearchResponse, int]:
     tokens = 0
     client = LLMTasks()  # provider chosen by config; raises if the provider's key is missing
@@ -146,7 +169,12 @@ def answer_question(question: str) -> tuple[AISearchResponse, int]:
             return AISearchResponse(refused=True, reason="error"), tokens
         source = "fallback"
 
-    # 3) format grounded in the returned rows
+    # 3) an empty result is reported, not narrated (see _no_data)
+    if not rows:
+        logger.info("ai search matched no rows", source=source)
+        return _no_data(source), tokens
+
+    # 4) format grounded in the returned rows
     # Applies to BOTH paths (handler and fallback) and runs before format_answer, so
     # raw column names are never even shown to the LLM that writes the prose answer.
     columns, rows = _to_public_columns(columns, rows)
