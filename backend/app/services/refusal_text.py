@@ -10,10 +10,10 @@ backend rather than the client (where the text used to be built from `reason`):
   2. One text, one place. The client rendered its own wording per reason; nothing kept those in
      sync with what the backend actually did.
 
-Anything that means "we have no data for that" — off-domain, unsupported, empty result, internal
-error — gets the SAME generic answer, deliberately: the distinction matters for our metrics
-(`reason` still records it), not to the person asking. Only the two operational refusals (daily
-limit, budget) say something different, because there the user's next step is different.
+There are exactly two things a user can be shown: an answer built from the data, or the one string
+below. Every refusal takes the same wording — off-domain, unsupported, empty result, daily limit,
+budget, internal error alike. The distinction between them matters for our metrics, where `reason`
+still records it, not to the person asking.
 """
 from __future__ import annotations
 
@@ -21,23 +21,12 @@ import re
 
 _HEBREW = re.compile(r"[֐-׿]")
 
-# The generic "we can't answer that" reply, for every reason that boils down to no relevant data.
+# The one reply, in the two languages the product speaks.
 _GENERIC = {
     "en": "I don't have data that answers that. You can ask about flights at Ben Gurion — "
           "airlines, punctuality, delays, cancellations and destinations.",
     "he": "אין לי נתונים שעונים על השאלה הזו. אפשר לשאול על טיסות בנתב\"ג — "
           "חברות תעופה, דיוק בזמנים, עיכובים, ביטולים ויעדים.",
-}
-
-_OPERATIONAL = {
-    "limit": {
-        "en": "You've reached today's question limit. Please try again tomorrow.",
-        "he": "הגעת למכסת השאלות היומית. אפשר לנסות שוב מחר.",
-    },
-    "budget": {
-        "en": "AI search is busy right now — please try again later, or use the destination search.",
-        "he": "חיפוש ה-AI עמוס כרגע — נסו שוב מאוחר יותר, או השתמשו בחיפוש היעדים.",
-    },
 }
 
 
@@ -47,7 +36,12 @@ def question_language(question: str) -> str:
 
 
 def refusal_answer(reason: str | None, question: str) -> str:
-    """The message shown to the user for a refusal, in the language they asked in."""
-    lang = question_language(question)
-    table = _OPERATIONAL.get(reason or "")
-    return (table or _GENERIC)[lang]
+    """
+    The message shown for any refusal, in the language the question was asked in.
+
+    `reason` is accepted but not branched on: it stays in the signature because callers have it and
+    analytics records it, and because reading `refusal_answer(reason, q)` at the call site says what
+    this is for. If a reason ever needs its own wording, this is where that decision would live —
+    today none does.
+    """
+    return _GENERIC[question_language(question)]

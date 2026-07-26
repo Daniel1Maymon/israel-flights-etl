@@ -136,7 +136,7 @@ LLM_MODEL=gemini-2.5-flash
 | Provider / model | `LLM_PROVIDER` / `LLM_MODEL` | `gemini` / `gemini-2.5-flash` |
 | API key | `GEMINI_API_KEY` (or `OPENAI_API_KEY`) | — (required) |
 | Read-only DB URL | `DATABASE_URL_RO` | — (the `rankair_ro` role) |
-| Per-user daily cap | `AI_DAILY_LIMIT_PER_USER` | `20` |
+| Per-user daily cap | `AI_DAILY_LIMIT_PER_USER` | `10` |
 | Monthly token budget | `AI_MONTHLY_BUDGET_TOKENS` | `20000000` |
 | Max question length | `AI_MAX_QUESTION_CHARS` | `500` |
 | Forced row limit | `AI_MAX_ROWS` | `50` |

@@ -15,27 +15,14 @@ interface AISearchResponse {
   data_end?: string | null;
 }
 
-const REFUSALS: Record<string, { en: string; he: string }> = {
-  off_domain: {
-    en: "I can help with questions about flights, airlines, delays, and destinations from Ben Gurion. Try asking differently.",
-    he: "אני יכול לעזור בשאלות על טיסות, חברות תעופה, עיכובים ויעדים מנתב\"ג. נסו לשאול אחרת.",
-  },
-  unsupported: {
-    en: "I can't answer that specific question yet.",
-    he: "אני עדיין לא יכול לענות על השאלה הזו.",
-  },
-  limit: {
-    en: "You've reached today's question limit. Please try again tomorrow.",
-    he: "הגעתם למכסת השאלות היומית. נסו שוב מחר.",
-  },
-  budget: {
-    en: "AI search is busy right now — please use the destination search above.",
-    he: "חיפוש ה-AI עמוס כרגע — השתמשו בחיפוש היעדים למעלה.",
-  },
-  error: {
-    en: "Something went wrong. Try rephrasing your question.",
-    he: "משהו השתבש. נסו לנסח מחדש את השאלה.",
-  },
+// A refusal's wording comes from the backend (services/refusal_text.py), which also records it in
+// ai_events — so what the user reads is what the admin dashboard replays. This copy exists only for
+// a response that arrives with answer: null, i.e. an older backend behind a cached deploy. Keep it
+// identical to the server's string: there are two things a user may see, an answer from the data or
+// this one, and a stale client must not invent a third.
+const GENERIC_REFUSAL = {
+  en: "I don't have data that answers that. You can ask about flights at Ben Gurion — airlines, punctuality, delays, cancellations and destinations.",
+  he: "אין לי נתונים שעונים על השאלה הזו. אפשר לשאול על טיסות בנתב\"ג — חברות תעופה, דיוק בזמנים, עיכובים, ביטולים ויעדים.",
 };
 
 export const AISearch = () => {
@@ -73,34 +60,8 @@ export const AISearch = () => {
     if (e.key === "Enter") ask();
   };
 
-  const monthYear = (iso: string) =>
-    new Date(iso).toLocaleDateString(isHe ? "he-IL" : "en-GB", { month: "long", year: "numeric" });
-
-  // "Nothing found" alone is ambiguous: it reads the same for a filter that matched nothing and
-  // for a question this dataset can't answer at all (an airline that stopped flying to TLV leaves
-  // no rows behind). Name the coverage window and what the data is, so the user can tell which.
-  const noDataText = (r: AISearchResponse) => {
-    const range =
-      r.data_start && r.data_end
-        ? isHe
-          ? ` הנתונים שלנו מכסים טיסות בנתב"ג מ${monthYear(r.data_start)} עד ${monthYear(r.data_end)}.`
-          : ` Our data covers Ben Gurion flights from ${monthYear(r.data_start)} to ${monthYear(r.data_end)}.`
-        : "";
-    const scope = isHe
-      ? ' אנחנו רושמים רק טיסות שמופיעות בלוח הטיסות של נתב"ג, כך שחברת תעופה שאינה טסה לישראל כלל לא תופיע בנתונים.'
-      : " We only record flights that appear in the Ben Gurion schedule, so an airline that isn't flying to Israel at all leaves no trace in the data.";
-    return (isHe ? "לא נמצאו טיסות שמתאימות לשאלה." : "No flights in our data match that question.") + range + scope;
-  };
-
-  // The backend now sends the refusal wording it recorded in ai_events, so what the user reads and
-  // what the admin dashboard replays are the same string. The maps below stay as a fallback for
-  // responses from an older backend (or a cached deploy) that still send answer: null.
-  const refusalText = (result: AISearchResponse) => {
-    if (result.answer) return result.answer;
-    if (result.reason === "no_data") return noDataText(result);
-    const r = REFUSALS[result.reason || "error"] || REFUSALS.error;
-    return isHe ? r.he : r.en;
-  };
+  const refusalText = (result: AISearchResponse) =>
+    result.answer || (isHe ? GENERIC_REFUSAL.he : GENERIC_REFUSAL.en);
 
   const COLUMN_LABELS: Record<string, { en: string; he: string }> = {
     airline_name: { en: "Airline", he: "חברת תעופה" },

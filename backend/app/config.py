@@ -137,7 +137,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""                        # GEMINI_API_KEY
     openai_api_key: str = ""                        # OPENAI_API_KEY
     database_url_ro: str = ""                       # DATABASE_URL_RO — read-only rankair_ro role
-    ai_daily_limit_per_user: int = 20               # questions per user per day
+    ai_daily_limit_per_user: int = 10               # questions per user per day
     ai_monthly_budget_tokens: int = 20_000_000      # global monthly token ceiling (~$6-8 Flash)
     ai_max_question_chars: int = 500                # reject longer questions pre-call
     ai_max_rows: int = 50                           # forced LIMIT on all AI queries
