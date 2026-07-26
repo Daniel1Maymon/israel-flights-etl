@@ -43,7 +43,11 @@ def ensure_tables(engine: Engine) -> None:
 
 def make_user_key(client_ip: str | None, cookie_id: str | None) -> str:
     """
-    Identity for the daily cap: the client IP, hashed (the raw IP is never stored).
+    Identity for the daily cap: the client IP, hashed.
+
+    Hashed here because a counter needs no more than an identity. The raw address is kept
+    separately on the ai_events row, where the admin dashboard shows it — so "the IP is never
+    stored" is no longer true of the system, only of this table.
 
     It used to be IP + cookie, which cancelled the cap out entirely. The cookie is set
     SameSite=Lax and the frontend and API are different sites, so the browser never sends it back

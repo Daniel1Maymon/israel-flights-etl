@@ -3,12 +3,15 @@ analytics.py — per-request event log for AI search + read-only aggregates for 
 
 Complements ratelimit.py: where ai_usage/ai_budget hold only counters, ai_events holds ONE row per
 question (the text people typed, the answer they saw, whether it was answered or refused, tokens,
-latency, and country). Writes go through the normal writable Session; the read aggregates power
+latency, country, and IP). Writes go through the normal writable Session; the read aggregates power
 GET /api/v1/admin/*.
 
-Privacy: user_key is the same SHA-256(IP+cookie) hash used for rate limiting. The raw IP is used
-ONLY transiently to resolve a country and is never stored — we keep the country label, not the IP.
-Question text and the answer ARE stored verbatim (that is the point of the feature).
+Privacy: question text and the answer are stored verbatim — that is the point of the feature. The
+IP is now stored too, alongside the country it resolves to. It used to be dropped after the country
+lookup, and that was the better default; it is kept because the daily cap counts IPs, and a cap you
+cannot see counting is a cap you cannot tell is working (this was learned the hard way — one
+visitor reached 50+ questions under a cap of 20 that had never once fired). user_key remains a
+hash, so the counter tables still carry no addresses.
 """
 from __future__ import annotations
 
@@ -43,12 +46,14 @@ CREATE TABLE IF NOT EXISTS ai_events (
     handler      TEXT,
     row_count    INT,
     country      TEXT,
-    country_code TEXT
+    country_code TEXT,
+    ip           TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_ai_events_created_at ON ai_events (created_at DESC);
 ALTER TABLE ai_events ADD COLUMN IF NOT EXISTS answer       TEXT;
 ALTER TABLE ai_events ADD COLUMN IF NOT EXISTS country      TEXT;
 ALTER TABLE ai_events ADD COLUMN IF NOT EXISTS country_code TEXT;
+ALTER TABLE ai_events ADD COLUMN IF NOT EXISTS ip           TEXT;
 """
 
 # Small in-process IP->country cache so repeat visitors cost nothing. Bounded loosely; for a
@@ -115,12 +120,13 @@ def record_event(
         text("""
             INSERT INTO ai_events
                 (user_key, question, answer, refused, reason, tokens, latency_ms,
-                 handler, row_count, country, country_code)
+                 handler, row_count, country, country_code, ip)
             VALUES
                 (:user_key, :question, :answer, :refused, :reason, :tokens, :latency_ms,
-                 :handler, :row_count, :country, :country_code)
+                 :handler, :row_count, :country, :country_code, :ip)
         """),
         {
+            "ip": ip,
             "user_key": user_key,
             "question": question,
             "answer": answer,
@@ -205,7 +211,12 @@ def get_recent_events(db: Session, limit: int = 100) -> list[dict[str, Any]]:
             SELECT
                 to_char(created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
                 question, answer, refused, reason, tokens, latency_ms,
-                handler, row_count, country, country_code
+                handler, row_count, country, country_code, ip,
+                -- questions from this IP today: the number the daily cap is counting, so a
+                -- visitor working through the quota is visible while it is happening.
+                (SELECT COUNT(*) FROM ai_events e2
+                  WHERE e2.ip = ai_events.ip AND e2.created_at::date = ai_events.created_at::date)
+                  AS ip_questions_today
             FROM ai_events
             ORDER BY created_at DESC
             LIMIT :n

@@ -42,6 +42,8 @@ type EventRow = {
   row_count: number | null;
   country: string | null;
   country_code: string | null;
+  ip: string | null;
+  ip_questions_today: number | null;
 };
 
 class AuthError extends Error {}
@@ -272,6 +274,7 @@ export default function Admin() {
                     <th className="py-2 pr-4 font-medium whitespace-nowrap">Time</th>
                     <th className="py-2 pr-4 font-medium">Question</th>
                     <th className="py-2 pr-4 font-medium whitespace-nowrap">Country</th>
+                    <th className="py-2 pr-4 font-medium whitespace-nowrap">IP</th>
                     <th className="py-2 pr-4 font-medium">Status</th>
                     <th className="py-2 pr-4 font-medium whitespace-nowrap">Latency</th>
                     <th className="py-2 pr-4 font-medium whitespace-nowrap">Tokens</th>
@@ -296,6 +299,30 @@ export default function Admin() {
                         <td className="py-2 pr-4 whitespace-nowrap">
                           {e.country_code ? `${flag(e.country_code)} ${e.country_code}` : "—"}
                         </td>
+                        {/* The IP is what the daily cap counts, so the count beside it says how far
+                            through the quota this visitor is — the number to look at when asking
+                            whether the cap is working. */}
+                        <td className="py-2 pr-4 whitespace-nowrap font-mono text-xs" dir="ltr">
+                          {e.ip ? (
+                            <>
+                              {e.ip}
+                              {e.ip_questions_today != null && (
+                                <span
+                                  className={`ml-2 tabular-nums ${
+                                    e.ip_questions_today >= 10
+                                      ? "text-red-500"
+                                      : "text-muted-foreground"
+                                  }`}
+                                  title="questions from this IP that day"
+                                >
+                                  ×{e.ip_questions_today}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="py-2 pr-4 whitespace-nowrap">
                           {e.refused ? (
                             <span className="text-red-500">refused · {e.reason ?? "—"}</span>
@@ -314,7 +341,7 @@ export default function Admin() {
                       </tr>
                       {expanded.has(i) && (
                         <tr className="border-b last:border-0 bg-muted/30">
-                          <td colSpan={6} className="py-3 px-4" dir="auto">
+                          <td colSpan={7} className="py-3 px-4" dir="auto">
                             <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
                               Answer shown to user
                             </div>

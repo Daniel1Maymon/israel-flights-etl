@@ -124,6 +124,10 @@ Known trade: a shared NAT draws on one quota, and a phone changing networks gets
 the cookie to *split* a shared IP (never to widen it) is the next step, and needs the cookie set
 `SameSite=None; Secure` first.
 
+The admin dashboard shows the IP on every row, with a `×N` count of that day's questions from it
+(red once it reaches the cap) — a cap you can't watch counting is a cap you can't tell is working.
+`ai_events` therefore stores the raw address; `ai_usage` still holds only the hash.
+
 ### Components
 
 | File | Job |
