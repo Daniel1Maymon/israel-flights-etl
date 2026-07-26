@@ -1,10 +1,26 @@
-"""Build the AI answer-accuracy regression sheet from the recorded runs."""
+"""
+Build the AI answer-accuracy regression sheet from the recorded runs.
+
+The inputs are NOT in the repo and should not be: events.json is a dump of ai_events, which
+carries real visitors' questions and IP addresses. Point AI_RUNS_DIR at wherever you have them:
+
+    events.json    ai_events rows        -> the Run 1 column (production, pre-fix)
+    rerun.jsonl    48 prompts x 3 runs   -> Run 2
+    rerun3.jsonl   same, post-fix        -> Run 3
+    rerun4.jsonl   same, post-ablation   -> Run 4
+
+Verdicts are hand-graded against the appendix SQL, not derived — see the grading rule in the
+generated document. The run columns ARE derived, so they cannot drift from what was recorded.
+"""
 import json
+import os
 import re
 from collections import defaultdict
 
-BASE = ("/private/tmp/claude-501/-Users-secondbite-Desktop-my-projects/"
-        "4f4c690a-32a9-4b8e-82ea-0067a97a44a4/scratchpad/")
+
+BASE = os.environ.get("AI_RUNS_DIR", "").rstrip("/") + "/" if os.environ.get("AI_RUNS_DIR") else (
+    "/private/tmp/claude-501/-Users-secondbite-Desktop-my-projects/"
+    "4f4c690a-32a9-4b8e-82ea-0067a97a44a4/scratchpad/")
 OUT = "/Users/secondbite/Desktop/my_projects/israel-flights-etl/backend/tests/AI_ANSWER_ACCURACY.md"
 
 run1_all = json.load(open(BASE + "events.json"))["events"]
@@ -17,6 +33,19 @@ run2 = defaultdict(list)
 for line in open(BASE + "rerun.jsonl"):
     r = json.loads(line)
     run2[r["question"]].append(r)
+
+run3 = defaultdict(list)
+for line in open(BASE + "rerun3.jsonl"):
+    r = json.loads(line)
+    run3[r["question"]].append(r)
+
+run4 = defaultdict(list)
+try:
+    for line in open(BASE + "rerun4.jsonl"):
+        r = json.loads(line)
+        run4[r["question"]].append(r)
+except FileNotFoundError:
+    pass
 
 # id, question-substring, section, what a correct answer must contain, verifying SQL
 SPEC = [
@@ -146,6 +175,33 @@ MARK = {"PASS": "✅", "FAIL": "❌", "PART": "🟡"}
 # Cases that got WORSE between run 1 and run 2 — regressions introduced by the same-day fixes.
 REGRESSED = {"C4", "C5", "N4", "N6"}
 
+# Run 3, graded against the appendix SQL after the no-substitution / ranking-metadata /
+# handler-ordering / destination-resolver fixes.
+VERDICT3 = {
+ "C1": "PASS", "C2": "PASS", "C3": "PASS", "C4": "PASS", "C5": "PASS",
+ "R1": "PASS", "R2": "PASS", "R3": "PASS", "R4": "PASS", "R5": "PASS",
+ "R6": "PASS", "R7": "PASS", "R8": "PASS", "R9": "PART",
+ "S1": "FAIL", "S2": "FAIL", "S3": "FAIL", "S4": "PASS",
+ "N1": "PASS", "N2": "PASS", "N3": "PASS", "N4": "PASS", "N5": "PASS", "N6": "PASS",
+ "D1": "FAIL", "D2": "PASS", "D3": "PASS",
+ "A1": "PASS", "A2": "FAIL", "A3": "PART",
+}
+
+# Correct in Run 2, refused in Run 3 — the over-refusal the no-substitution rule introduced.
+REGRESSED3 = {"S2", "D1", "A2"}
+
+# Run 4 — after scoping the refusal rule: injection sentence dropped, "when in doubt" dropped,
+# and a carve-out naming individual-flight questions as answerable. Filled after the run.
+VERDICT4 = {
+ "C1": "PASS", "C2": "PASS", "C3": "PASS", "C4": "PASS", "C5": "PASS",
+ "R1": "PASS", "R2": "PASS", "R3": "PASS", "R4": "PASS", "R5": "PASS",
+ "R6": "PASS", "R7": "PASS", "R8": "PASS", "R9": "PART",
+ "S1": "PASS", "S2": "PASS", "S3": "PASS", "S4": "PASS",
+ "N1": "PASS", "N2": "PASS", "N3": "PASS", "N4": "PASS", "N5": "PASS", "N6": "PASS",
+ "D1": "FAIL", "D2": "PASS", "D3": "PASS",
+ "A1": "PASS", "A2": "PASS", "A3": "PASS",
+}
+
 
 def find(frag):
     frag = frag.rstrip("$")
@@ -163,8 +219,8 @@ def cell_run1(q):
     return f"`{', '.join(n[:4]) or '—'}`" if n else "_(no figures)_"
 
 
-def cell_run2(q):
-    rs = run2.get(q, [])
+def _cell(q, store):
+    rs = store.get(q, [])
     if not rs:
         return "—"
     states, figs = set(), []
@@ -174,8 +230,20 @@ def cell_run2(q):
     stable = "" if len(set(figs)) == 1 else " ⚠️**varies**"
     shown = ", ".join(figs[0]) if figs[0] else "—"
     if all(s.startswith("REFUSED") for s in states):
-        return f"_{list(states)[0]}_{stable}"
+        return f"_{sorted(states)[0]}_{stable}"
     return f"`{shown}`{stable}"
+
+
+def cell_run2(q):
+    return _cell(q, run2)
+
+
+def cell_run3(q):
+    return _cell(q, run3)
+
+
+def cell_run4(q):
+    return _cell(q, run4) if run4 else ""
 
 
 rows = defaultdict(list)
@@ -185,7 +253,7 @@ for cid, frag, section, expected, sql in SPEC:
     if not q:
         missing.append((cid, frag))
         continue
-    rows[section].append((cid, q, expected, cell_run1(q), cell_run2(q), sql))
+    rows[section].append((cid, q, expected, cell_run1(q), cell_run2(q), cell_run3(q), cell_run4(q), sql))
 
 TITLES = {
     "counts": "A. Counts — one number, must equal the dashboard bar",
@@ -207,7 +275,7 @@ correct answer must contain, verified by running the SQL in the appendix against
 | **Expected** | what a correct answer must contain. `REFUSE` = the honest answer is "I can't answer that" — an invented number is a failure, not a near-miss. |
 | **Run 1** | production, 2026-07-26 morning, read from `ai_events`. Pre-fix. |
 | **Run 2** | re-run same day after the count/no_data/carrier_recovery fixes, 3 executions per prompt. ⚠️ **varies** = the three runs disagreed. |
-| **Run 3** | *to fill after the next round of fixes.* |
+| **Run 3** | after the no-substitution / ranking-metadata / handler-ordering fixes, 3 executions per prompt. |
 
 **Grading rule — judge the premise before the arithmetic.** If the question is not answerable at
 all — a metric that does not exist (`הכי דניאל`), an entity absent from the data, or an instruction
@@ -229,17 +297,29 @@ percentages should match to ±0.5. Re-derive with the appendix SQL rather than t
         if not rows[sec]:
             continue
         f.write(f"## {title}\n\n")
-        f.write("| ID | Prompt | Expected | Run 1 (pre-fix) | Run 2 (current) | Run 3 (after fixes) |\n")
-        f.write("|---|---|---|---|---|---|\n")
-        for cid, q, expected, r1, r2, _ in rows[sec]:
+        f.write("| ID | Prompt | Expected | Run 1 | Run 2 | Run 3 | Run 4 |\n")
+        f.write("|---|---|---|---|---|---|---|\n")
+        for cid, q, expected, r1, r2, r3c, r4c, _ in rows[sec]:
             qq = q.replace("|", "\\|").replace("\n", " ")
             qq = qq[:70] + ("…" if len(qq) > 70 else "")
             v1, v2 = VERDICT.get(cid, ("", ""))
             m1, m2 = MARK.get(v1, ""), MARK.get(v2, "")
             flag = " ⬇️" if cid in REGRESSED else ""
-            f.write(f"| **{cid}**{flag} | {qq} | {expected} | {m1} {r1} | {m2} {r2} | |\n")
+            flag += " ⬇️³" if cid in REGRESSED3 else ""
+            f.write(f"| **{cid}**{flag} | {qq} | {expected} | {m1} {r1} | {m2} {r2} | {MARK.get(VERDICT3.get(cid, ''), '')} {r3c} | {MARK.get(VERDICT4.get(cid, ''), '')} {r4c} |\n")
         f.write("\n")
 
+    def tally(d, i):
+        get = lambda k: d[k][i] if isinstance(d[k], tuple) else d[k]
+        return {v: sum(1 for k in d if get(k) == v) for v in ("PASS", "PART", "FAIL")}
+    t1, t2, t3, t4 = tally(VERDICT, 0), tally(VERDICT, 1), tally(VERDICT3, 0), tally(VERDICT4, 0)
+    f.write("## Score\n\n| | correct | partial | wrong |\n|---|---:|---:|---:|\n"
+            f"| Run 1 — production, pre-fix | {t1['PASS']} | {t1['PART']} | {t1['FAIL']} |\n"
+            f"| Run 2 — count handler + no_data + resolver | {t2['PASS']} | {t2['PART']} | {t2['FAIL']} |\n"
+            f"| Run 3 — no-substitution + metadata + ordering | {t3['PASS']} | {t3['PART']} | {t3['FAIL']} |\n"
+            f"| **Run 4 — refusal rule scoped by ablation** | **{t4['PASS']}** | **{t4['PART']}** | **{t4['FAIL']}** |\n\n")
+    f.write(open(BASE + "run4_notes.md").read())
+    f.write(open(BASE + "run3_notes.md").read())
     f.write(r"""## What Run 2 changed
 
 **Fixed** — C1 (7,553 → 79,464), C2 (183 → 186), N1 (22 invented airlines → `no_data`),
@@ -286,7 +366,7 @@ than enums, so they flip between runs and change which end of a ranking is repor
 """    )
     f.write("## Appendix — verification SQL\n\nRun as `rankair_ro`; each returns the figure the answer must match.\n\n")
     for sec in TITLES:
-        for cid, _, _, _, _, sql in rows[sec]:
+        for cid, _, _, _, _, _, _, sql in rows[sec]:
             f.write(f"**{cid}**\n```sql\n{sql}\n```\n\n")
 
 print("wrote", OUT)
