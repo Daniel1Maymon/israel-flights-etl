@@ -195,8 +195,24 @@ def get_metrics(db: Session) -> dict[str, Any]:
         """)
     ).mappings().all()
 
+    # Probe spend lives in its own table and is merged in here, never mixed into the aggregates
+    # above -- those must keep describing real visitors only. See services/probe_runs.py.
+    from app.services.probe_runs import get_test_metrics
+
+    test = get_test_metrics(db)
+    test_tokens = int(test["test_tokens_this_month"])
+
     total_tokens = int(totals["total_tokens"])
     return {
+        **test,
+        "test_cost_usd": round(test_tokens / 1_000_000 * COST_PER_1M_TOKENS, 4),
+        # user + probe: what the provider actually bills. The kill switch deliberately ignores the
+        # probe half (a test run must not darken the live site), so this is the only place the
+        # true total is visible.
+        "combined_tokens": total_tokens + test_tokens,
+        "combined_cost_usd": round(
+            (total_tokens + test_tokens) / 1_000_000 * COST_PER_1M_TOKENS, 4
+        ),
         "total_questions": int(totals["total_questions"]),
         "unique_users": int(totals["unique_users"]),
         "unique_ips": int(totals["unique_ips"] or 0),

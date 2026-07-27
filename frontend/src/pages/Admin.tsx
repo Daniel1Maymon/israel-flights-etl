@@ -23,6 +23,14 @@ type Metrics = {
   unique_ips: number;
   total_tokens: number;
   estimated_cost_usd: number;
+  // Probe-harness spend, tracked apart from visitor spend: scripts/ai_probe.py bypasses the
+  // endpoint, so none of it reaches ai_budget and the kill switch never sees it. Combined is
+  // what the provider actually bills.
+  test_tokens_this_month: number;
+  test_runs_this_month: number;
+  test_cost_usd: number;
+  combined_tokens: number;
+  combined_cost_usd: number;
   refusal_rate: number;
   p50_latency_ms: number;
   p95_latency_ms: number;
@@ -285,6 +293,19 @@ export default function Admin() {
               <StatCard label="Refusal rate" value={`${(m.refusal_rate * 100).toFixed(1)}%`} />
               <StatCard label="Est. cost" value={`$${m.estimated_cost_usd.toFixed(2)}`} />
               <StatCard label="Total tokens" value={m.total_tokens.toLocaleString()} />
+              {/* Probe spend is real money the kill switch deliberately ignores — a test run must
+                  never darken the live site. Showing it here is the only thing that keeps the
+                  true bill visible. */}
+              <StatCard
+                label="Test tokens (month)"
+                value={`${m.test_tokens_this_month.toLocaleString()} / ${m.test_runs_this_month} run${
+                  m.test_runs_this_month === 1 ? "" : "s"
+                }`}
+              />
+              <StatCard
+                label="Combined cost"
+                value={`$${m.combined_cost_usd.toFixed(2)}`}
+              />
               <StatCard label="Latency p50" value={`${m.p50_latency_ms} ms`} />
               <StatCard label="Latency p95" value={`${m.p95_latency_ms} ms`} />
             </div>

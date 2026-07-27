@@ -204,6 +204,26 @@ def write_report(records: list[dict], path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _log_run_to_db(*, tag: str, questions: int, repeats: int, tokens: int, artifact: str) -> None:
+    """
+    Record what this run cost, so probe spend stops being invisible.
+
+    answer_question() reaches the database through the READ-ONLY role, so this needs the writable
+    DATABASE_URL that the app itself uses. Fail soft in every direction: a probe run is about the
+    answers, and bookkeeping must never be the reason one dies. If the write can't happen the
+    total is already on stdout above, and scripts/backfill_test_runs.py can import the jsonl later.
+    """
+    from app.services.probe_runs import record_run_safely
+
+    written = record_run_safely(
+        tag=tag, questions=questions, repeats=repeats, tokens=tokens, artifact=artifact
+    )
+    if written:
+        print(f"logged to ai_test_runs ({tokens} tokens)")
+    else:
+        print("not logged to ai_test_runs; import later with backfill_test_runs.py")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", nargs="*", help="run only these prompt ids")
@@ -260,6 +280,13 @@ def main() -> None:
 
     total_tokens = sum(r.get("tokens") or 0 for r in records)
     print(f"\n{jsonl}\n{md}\ntotal tokens: {total_tokens}")
+    _log_run_to_db(
+        tag=args.tag,
+        questions=len(order),
+        repeats=max(1, args.repeat),
+        tokens=total_tokens,
+        artifact=jsonl.name,
+    )
 
 
 if __name__ == "__main__":

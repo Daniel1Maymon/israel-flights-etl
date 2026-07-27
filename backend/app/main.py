@@ -53,10 +53,12 @@ async def lifespan(app: FastAPI):
         from app.services.ai_flags import ensure_flags_table
         from app.services.analytics import ensure_events_table
         from app.services.ratelimit import ensure_tables
+        from app.services.probe_runs import ensure_test_runs_table
 
         ensure_tables(engine)
         ensure_events_table(engine)
         ensure_flags_table(engine)
+        ensure_test_runs_table(engine)
     except Exception as exc:
         # Non-fatal: the tables normally already exist, and the API must still serve
         # flight data if only the AI-search bookkeeping is unavailable.
