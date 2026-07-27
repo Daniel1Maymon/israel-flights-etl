@@ -121,9 +121,22 @@ const translations = {
     'database.error': 'Failed to connect to database',
     
     // Destination Search Hero
+    'search.byDestination': 'Search by destination',
     'search.whereFlying': 'Where are you flying?',
     'search.placeholder': 'For example: London',
+    'search.destinationPlaceholder': 'Search for a destination (e.g. Barcelona)',
     'search.popularDestinations': 'Popular destinations:',
+    'search.or': 'OR',
+
+    // AI natural-language search
+    'ai.badge': 'AI',
+    'ai.title': 'Ask the data',
+    'ai.description': 'Ask questions in natural language about airlines, destinations, delays and cancellations.',
+    'ai.placeholder': 'Which airline is the most reliable for Barcelona?',
+    'ai.placeholderShort': 'Most reliable airline to Barcelona?',
+    'ai.ask': 'Ask',
+    'ai.basedOnOver': 'Based on over {count} flights',
+    'ai.error': 'Network error. Please try again.',
 
     // Destination Performance Table
     'performance.tableTitle': 'Airline Performance to {city}',
@@ -410,9 +423,22 @@ const translations = {
     'database.error': 'נכשל בחיבור למסד הנתונים',
     
     // Destination Search Hero
+    'search.byDestination': 'חיפוש לפי יעד',
     'search.whereFlying': 'לאן אתם טסים?',
     'search.placeholder': 'לדוגמה: לונדון',
+    'search.destinationPlaceholder': 'חפשו יעד (לדוגמה: ברצלונה)',
     'search.popularDestinations': 'יעדים פופולריים:',
+    'search.or': 'או',
+
+    // AI natural-language search
+    'ai.badge': 'AI',
+    'ai.title': 'שאלו את הנתונים',
+    'ai.description': 'שאלו שאלות בשפה חופשית על חברות תעופה, יעדים, עיכובים וביטולים.',
+    'ai.placeholder': 'איזו חברת תעופה הכי אמינה לברצלונה?',
+    'ai.placeholderShort': 'החברה הכי אמינה לברצלונה?',
+    'ai.ask': 'שאלו',
+    'ai.basedOnOver': 'מבוסס על יותר מ-{count} טיסות',
+    'ai.error': 'שגיאת רשת. נסו שוב.',
 
     // Destination Performance Table
     'performance.tableTitle': 'ביצועי חברות תעופה ל{city}',

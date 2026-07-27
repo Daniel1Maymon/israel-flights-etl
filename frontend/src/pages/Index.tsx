@@ -80,13 +80,26 @@ const Index = () => {
         <p className="text-sm text-muted-foreground/70 sm:text-base">{t("dashboard.subtitle.line2")}</p>
       </div>
 
-      {/* Hero search */}
-      <div className="py-4 mb-4 sm:py-8 sm:mb-6">
+      {/* Two distinct ways in: a plain destination lookup, or the AI query over the flight
+          database. They used to be near-identical input boxes and were easy to confuse, so they
+          are now separate blocks split by an explicit OR divider. */}
+      <div className="pt-2 sm:pt-4">
         <DestinationSearch value={selectedCity} onChange={handleDestinationChange} />
       </div>
 
+      <div className="relative mx-auto my-6 max-w-3xl sm:my-8">
+        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center">
+          <span className="bg-background px-4 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            {t("search.or")}
+          </span>
+        </div>
+      </div>
+
       {/* AI natural-language search */}
-      <div className="mb-6 sm:mb-10">
+      <div className="mb-8 sm:mb-12">
         <AISearch />
       </div>
 

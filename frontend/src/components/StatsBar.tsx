@@ -63,17 +63,17 @@ export const StatsBar = () => {
       {items.map(({ icon: Icon, value, label }) => (
         <div
           key={label}
-          className="flex min-w-0 basis-[calc(33.333%-0.5rem)] flex-col items-center justify-center gap-1 rounded-lg border border-border bg-card px-1.5 py-2.5 sm:basis-[calc(20%-0.64rem)] sm:flex-row sm:gap-2 sm:px-2 sm:py-3"
+          className="flex min-w-0 basis-[calc(33.333%-0.5rem)] flex-col items-center justify-center gap-1 rounded-lg border border-border bg-card px-1.5 py-2 sm:basis-[calc(20%-0.64rem)] sm:flex-row sm:gap-2 sm:px-2 sm:py-2.5"
         >
           <Icon
-            className="h-4 w-4 shrink-0 text-muted-foreground sm:h-6 sm:w-6"
+            className="h-4 w-4 shrink-0 text-muted-foreground sm:h-5 sm:w-5"
             aria-hidden="true"
           />
           <div className="flex min-w-0 flex-col items-center text-center">
             {/* Phone tiles are ~90px wide; a 6-figure count at text-2xl needs ~85px and used to
                 spill straight out of the card. Scale the number with the viewport instead. */}
             <span
-              className="text-base font-semibold text-foreground tabular-nums leading-none sm:text-2xl"
+              className="text-sm font-semibold text-foreground tabular-nums leading-none sm:text-xl"
               dir="ltr"
             >
               {fmt(value)}

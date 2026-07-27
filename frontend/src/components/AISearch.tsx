@@ -1,8 +1,8 @@
-import { useState, KeyboardEvent } from "react";
+import { useState, useEffect, KeyboardEvent } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { API_ENDPOINTS } from "@/config/api";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Database } from "lucide-react";
 
 interface AISearchResponse {
   answer: string | null;
@@ -26,13 +26,38 @@ const GENERIC_REFUSAL = {
 };
 
 export const AISearch = () => {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const isMobile = useIsMobile();
   const isHe = language === "he";
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AISearchResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  // Powers the provenance label above an answer ("Based on 158,977 flights"). Best-effort: if the
+  // stats call fails we fall back to the generic wording rather than showing a placeholder count.
+  const [totalFlights, setTotalFlights] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(API_ENDPOINTS.STATS_OVERVIEW)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { total?: number } | null) => {
+        if (!cancelled && typeof data?.total === "number") setTotalFlights(data.total);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const localeNum = (n: number) => n.toLocaleString(isHe ? "he-IL" : "en-US");
+
+  // Headline claim on the card: rounded DOWN to the nearest thousand so "over N" stays true
+  // between ETL runs — the exact count belongs above the answer, not in the pitch.
+  const corpusLabel =
+    totalFlights === null || totalFlights < 1000
+      ? null
+      : t("ai.basedOnOver").replace("{count}", localeNum(Math.floor(totalFlights / 1000) * 1000));
 
   const ask = async () => {
     const q = question.trim();
@@ -96,82 +121,98 @@ export const AISearch = () => {
 
   return (
     <div className="w-full max-w-3xl mx-auto" dir={isHe ? "rtl" : "ltr"}>
-      <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-3 shadow-sm sm:px-4">
-        <Sparkles className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={onKey}
-          maxLength={500}
-          // The full prompt is ~40 chars and clips mid-word inside a phone-width input, which
-          // reads as a broken layout rather than a hint. Use a short one below the md breakpoint.
-          placeholder={
-            isHe
-              ? isMobile
-                ? "שאלו אותי על חברות התעופה…"
-                : "שאלו אותי כל דבר על ביצועי חברות התעופה…"
-              : isMobile
-                ? "Ask about airline performance…"
-                : "Ask me anything about airline performance…"
-          }
-          className="min-w-0 flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground sm:text-base"
-        />
-        <button
-          onClick={ask}
-          disabled={loading || !question.trim()}
-          className="shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 sm:px-4"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : isHe ? "שאל" : "Ask"}
-        </button>
-      </div>
-
-      {failed && (
-        <p className="mt-3 text-sm text-destructive">
-          {isHe ? "שגיאת רשת. נסו שוב." : "Network error. Please try again."}
-        </p>
-      )}
-
-      {result?.refused && (
-        <div className="mt-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          {refusalText(result)}
-        </div>
-      )}
-
-      {result && !result.refused && (
-        <div className="mt-4 space-y-4">
-          {result.answer && (
-            <div className="rounded-xl border border-border bg-card px-4 py-3 text-[15px] leading-relaxed whitespace-pre-line">
-              {result.answer}
-            </div>
+      {/* The AI query is the feature we want a first-time visitor to notice, so it reads as a
+          dedicated panel — tinted card, own heading and explainer — rather than a second search
+          box that could be mistaken for the destination lookup above it. */}
+      <div className="rounded-2xl border border-primary/25 bg-gradient-to-b from-primary/[0.08] to-primary/[0.02] p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground">
+            {t("ai.badge")}
+          </span>
+          <h2 className="text-lg font-semibold text-foreground sm:text-xl">
+            {t("ai.title")} <span aria-hidden="true">✨</span>
+          </h2>
+          {corpusLabel && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-background/60 px-2.5 py-1 text-[11px] font-medium text-primary">
+              <Database className="h-3 w-3" aria-hidden="true" />
+              {corpusLabel}
+            </span>
           )}
-          {result.rows.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-muted-foreground">
-                  <tr>
-                    {result.columns.map((c) => (
-                      <th key={c} className="px-3 py-2 text-start font-medium whitespace-nowrap">
-                        {label(c)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map((row, i) => (
-                    <tr key={i} className="border-t border-border">
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">{t("ai.description")}</p>
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={onKey}
+            maxLength={500}
+            // The full prompt clips mid-word inside a phone-width input, which reads as a broken
+            // layout rather than a hint. Use a short one below the md breakpoint.
+            placeholder={isMobile ? t("ai.placeholderShort") : t("ai.placeholder")}
+            className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary sm:text-base"
+          />
+          <button
+            onClick={ask}
+            disabled={loading || !question.trim()}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+            )}
+            {t("ai.ask")}
+          </button>
+        </div>
+
+        {failed && <p className="mt-3 text-sm text-destructive">{t("ai.error")}</p>}
+
+        {result?.refused && (
+          <div className="mt-4 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+            {refusalText(result)}
+          </div>
+        )}
+
+        {result && !result.refused && (
+          <div className="mt-4 space-y-4">
+            {/* Answer first, supporting rows below it. */}
+            {/* No provenance label here: the card header already states the flight count, and
+                repeating it directly under the input read as a duplicate. */}
+            {result.answer && (
+              <div className="rounded-xl border border-border bg-card px-4 py-3 text-[15px] leading-relaxed whitespace-pre-line">
+                {result.answer}
+              </div>
+            )}
+            {result.rows.length > 0 && (
+              <div className="overflow-x-auto rounded-xl border border-border bg-card">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
                       {result.columns.map((c) => (
-                        <td key={c} className="px-3 py-2 whitespace-nowrap">
-                          {fmt(row[c])}
-                        </td>
+                        <th key={c} className="px-3 py-2 text-start font-medium whitespace-nowrap">
+                          {label(c)}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+                  </thead>
+                  <tbody>
+                    {result.rows.map((row, i) => (
+                      <tr key={i} className="border-t border-border">
+                        {result.columns.map((c) => (
+                          <td key={c} className="px-3 py-2 whitespace-nowrap">
+                            {fmt(row[c])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -122,20 +122,25 @@ export const DestinationSearch = ({ value, onChange }: DestinationSearchProps) =
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto text-center">
+    <div className="w-full max-w-3xl mx-auto">
+      <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-foreground">
+        <Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        {t("search.byDestination")}
+      </h2>
+
       <div className="relative" ref={ref}>
-        <Search className="absolute start-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-10" />
+        <Search className="absolute start-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
         <input
           type="text"
           dir="ltr"
           value={query}
-          placeholder={t("search.whereFlying")}
+          placeholder={t("search.destinationPlaceholder")}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
-          className="w-full ltr:pl-12 ltr:pr-5 rtl:pr-12 rtl:pl-5 py-5 text-xl rounded-2xl border-2 border-border bg-background focus:border-primary focus:outline-none transition-colors shadow-sm"
+          className="w-full ltr:pl-11 ltr:pr-4 rtl:pr-11 rtl:pl-4 py-3.5 text-base rounded-xl border border-border bg-background focus:border-primary focus:outline-none transition-colors"
         />
 
         {isOpen && suggestions.length > 0 && (
@@ -159,22 +164,18 @@ export const DestinationSearch = ({ value, onChange }: DestinationSearchProps) =
         )}
       </div>
 
-      <p className="mt-5 text-sm text-muted-foreground">
-        {t("search.popularDestinations")}{" "}
-        {POPULAR_DESTINATIONS.map((dest, i) => (
-          <span key={dest.en}>
-            <button
-              onClick={() => select(dest.en, dest.he)}
-              className="text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors"
-            >
-              {language === "he" ? dest.he : dest.en}
-            </button>
-            {i < POPULAR_DESTINATIONS.length - 1 && (
-              <span className="mx-1.5 text-muted-foreground/40">·</span>
-            )}
-          </span>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">{t("search.popularDestinations")}</span>
+        {POPULAR_DESTINATIONS.map((dest) => (
+          <button
+            key={dest.en}
+            onClick={() => select(dest.en, dest.he)}
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground transition-colors hover:border-primary hover:bg-accent hover:text-primary"
+          >
+            {language === "he" ? dest.he : dest.en}
+          </button>
         ))}
-      </p>
+      </div>
     </div>
   );
 };
