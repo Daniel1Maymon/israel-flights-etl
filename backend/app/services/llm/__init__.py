@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from app.config import settings
-from app.services.llm.base import LLMProvider, LLMResult
+from app.services.llm.base import LLMProvider, LLMQuotaExceeded, LLMResult
 
-__all__ = ["LLMProvider", "LLMResult", "get_provider"]
+__all__ = ["LLMProvider", "LLMQuotaExceeded", "LLMResult", "get_provider"]
 
 
 def get_provider(name: str | None = None) -> LLMProvider:

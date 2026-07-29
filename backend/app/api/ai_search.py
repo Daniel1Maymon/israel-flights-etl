@@ -3,7 +3,9 @@ AI Search endpoint — POST /api/v1/ai-search.
 
 Free-text question in → grounded answer + supporting rows out. Applies the cost/abuse guards
 (global budget kill-switch, per-user daily cap) before spending any LLM tokens, then delegates
-to the stateless orchestrator. All failures return a generic refusal (no internals leaked).
+to the stateless orchestrator. Failures refuse without leaking internals, but not identically:
+a cost outage and a fault are told apart here, because they are told apart to the user
+(see services/refusal_text.py).
 
 Every request also writes one analytics event (see services/analytics.py) — best-effort, never
 allowed to break the user path.
@@ -25,6 +27,7 @@ from app.schemas.ai_search import AISearchRequest, AISearchResponse
 from app.services.ai_flags import is_llm_enabled
 from app.services.ai_search import answer_question
 from app.services.analytics import record_event
+from app.services.llm import LLMQuotaExceeded
 from app.services.refusal_text import refusal_answer
 from app.services.ratelimit import (
     check_and_increment_user,
@@ -111,6 +114,14 @@ def _resolve(db: Session, question: str, user_key: str) -> tuple[AISearchRespons
 
     try:
         result, tokens = answer_question(question)
+    except LLMQuotaExceeded as e:
+        # A provider ceiling — a spend cap, a quota, a rate limit — is a cost outage, not a fault,
+        # and the user is told so (see refusal_text.budget_text). Caught ABOVE the generic handler
+        # because it used to fall into it: a Google spend cap became reason='error' and the site
+        # answered "I don't have data that answers that" to every question it can answer. The
+        # provider's own sentence goes to the log, where it names the cap that has to be raised.
+        logger.error("ai_search provider quota exhausted", error=str(e))
+        return AISearchResponse(refused=True, reason="provider_quota"), 0
     except Exception as e:
         logger.error("ai_search failed", error=str(e))
         return AISearchResponse(refused=True, reason="error"), 0

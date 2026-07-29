@@ -11,7 +11,7 @@ from typing import Optional, Type
 
 from pydantic import BaseModel
 
-from app.services.llm.base import LLMProvider, LLMResult
+from app.services.llm.base import LLMProvider, LLMQuotaExceeded, LLMResult
 
 
 class OpenAIProvider(LLMProvider):
@@ -44,7 +44,16 @@ class OpenAIProvider(LLMProvider):
         if response_schema is not None:
             kwargs["response_format"] = {"type": "json_object"}
 
-        resp = self._client.chat.completions.create(**kwargs)
+        try:
+            resp = self._client.chat.completions.create(**kwargs)
+        except Exception as e:
+            # Same translation the Gemini provider does, in this vendor's vocabulary: a spent
+            # quota and a rate limit both arrive as RateLimitError / HTTP 429.
+            from openai import RateLimitError
+
+            if isinstance(e, RateLimitError) or getattr(e, "status_code", None) == 429:
+                raise LLMQuotaExceeded(str(e)) from e
+            raise
         text = (resp.choices[0].message.content or "").strip()
         tokens = int(getattr(resp, "usage", None).total_tokens) if getattr(resp, "usage", None) else 0
 

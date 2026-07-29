@@ -12,16 +12,25 @@ backend rather than the client (where the text used to be built from `reason`):
 
 A user can be shown an answer built from the data, or one of the three sentences below.
 
-The default is the generic one, and nearly every refusal takes it — off-domain, unsupported, empty
-result, budget, internal error alike. Those differ in ways that matter to our metrics (`reason`
-records which) and not to the person asking; telling a visitor "unsupported" rather than "no data"
-gives them nothing to do differently.
+The default is the generic one, and the refusals about the QUESTION take it — off-domain,
+unsupported, empty result. Those differ in ways that matter to our metrics (`reason` records
+which) and not to the person asking; telling a visitor "unsupported" rather than "no data" gives
+them nothing to do differently.
 
-Two refusals get their own words, and the test is the same both times: the user's next step is
-different, so the generic sentence would actively mislead them. The daily cap (the data exists;
-they get it tomorrow) and the manual kill switch (the feature works; an admin turned it off to hold
-spend down). Under the generic wording either visitor reads "I don't have data that answers that",
-concludes the product is empty, and does not come back.
+The refusals about the SYSTEM get their own words, and the test is the same every time: the user's
+next step is different, so the generic sentence would actively mislead them.
+
+  limit           the daily cap — the data exists; they get it tomorrow
+  llm_off         an admin switched the feature off to hold spend down
+  budget          our own monthly token ceiling tripped
+  provider_quota  the provider's ceiling tripped: a spend cap, quota or rate limit
+  error           something broke
+
+Under the generic wording every one of those visitors reads "I don't have data that answers that",
+concludes the product is empty, and does not come back — when nothing is wrong with the data at
+all. That is not hypothetical for the last two. A Google project spend cap was hit in production,
+the 429 became reason='error', and the site told users the dataset had no answer for questions it
+answers perfectly well. The only record of the truth was a log line.
 """
 from __future__ import annotations
 
@@ -85,6 +94,52 @@ def off_text(lang: str) -> str:
     )
 
 
+def budget_text(lang: str) -> str:
+    """
+    The token-ceiling notice — for OUR monthly budget and for the PROVIDER's cap alike.
+
+    Two reasons, one sentence, because the two are one situation to a visitor: the feature is
+    paused over cost and will come back on its own. Which ceiling was hit is our problem, and
+    `reason` keeps them apart on the dashboard ('budget' vs 'provider_quota') so we can tell
+    whether we throttled ourselves or Google did.
+
+    Deliberately does not promise a date. The monthly budget resets with the month, a spend cap
+    resets when it is raised or the billing period rolls over, and a rate limit clears in a
+    minute — a specific time here would be wrong for at least two of the three.
+    """
+    if lang == "he":
+        return (
+            'הצ\'אט החכם הגיע למכסת הטוקנים שלו ומושהה כרגע. הוא יחזור כשהמכסה תתחדש — '
+            'בינתיים אפשר להשתמש בחיפוש היעדים, בדירוגי חברות התעופה ובלוח הטיסות.'
+        )
+    return (
+        "AI chat has reached its token limit and is paused for now. It'll be back when the limit "
+        "resets — in the meantime you can still use the destination search, the airline rankings "
+        "and the flight board."
+    )
+
+
+def error_text(lang: str) -> str:
+    """
+    The something-broke notice.
+
+    Says the answer failed, NOT that the answer does not exist — the distinction the generic
+    sentence destroyed. Retrying is worth suggesting here and nowhere else: an error may be
+    transient, whereas a cap or an off switch will refuse the next question just as firmly.
+    """
+    if lang == "he":
+        return (
+            'משהו השתבש אצלנו והתשובה לא נוצרה — זו תקלה זמנית, לא חוסר בנתונים. '
+            'כדאי לנסות שוב עוד רגע, ובינתיים חיפוש היעדים, דירוגי חברות התעופה ולוח '
+            'הטיסות עובדים כרגיל.'
+        )
+    return (
+        "Something went wrong on our side and the answer didn't come back — that's a temporary "
+        "fault, not missing data. Please try again in a moment; the destination search, the "
+        "airline rankings and the flight board are working as usual."
+    )
+
+
 def refusal_answer(reason: str | None, question: str) -> str:
     """The message shown for a refusal, in the language the question was asked in."""
     lang = question_language(question)
@@ -92,4 +147,8 @@ def refusal_answer(reason: str | None, question: str) -> str:
         return limit_text(lang)
     if reason == "llm_off":
         return off_text(lang)
+    if reason in ("budget", "provider_quota"):
+        return budget_text(lang)
+    if reason == "error":
+        return error_text(lang)
     return _GENERIC[lang]

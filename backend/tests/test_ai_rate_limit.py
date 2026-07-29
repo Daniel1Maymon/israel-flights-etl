@@ -18,7 +18,7 @@ from app.config import settings
 from app.main import app
 from app.schemas.ai_search import AISearchResponse
 from app.services.ratelimit import check_and_increment_user, make_user_key
-from app.services.refusal_text import _GENERIC, limit_text
+from app.services.refusal_text import _GENERIC, budget_text, limit_text
 
 
 class _Req:
@@ -175,13 +175,19 @@ def test_the_capped_request_is_still_recorded():
 
 
 def test_budget_kill_switch_also_answers_in_words():
-    """Same contract for the global budget refusal — no path returns a null answer."""
+    """
+    Same contract for the global budget refusal — no path returns a null answer.
+
+    It gets the token-ceiling wording, not the generic one: our monthly budget tripping is a fact
+    about our spending, and describing it as missing data tells the visitor the dataset is empty.
+    """
     with patch("app.api.ai_search.is_llm_enabled", return_value=True), patch(
         "app.api.ai_search.is_over_budget", return_value=True
     ), patch("app.api.ai_search.record_event"):
         r = TestClient(app).post("/api/v1/ai-search", json={"question": "hello"}).json()
 
-    assert (r["refused"], r["reason"], r["answer"]) == (True, "budget", _GENERIC["en"])
+    assert (r["refused"], r["reason"], r["answer"]) == (True, "budget", budget_text("en"))
+    assert r["answer"] not in _GENERIC.values()
 
 
 def test_an_answered_question_keeps_its_own_words():

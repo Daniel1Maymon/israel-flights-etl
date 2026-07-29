@@ -14,6 +14,21 @@ from typing import Optional, Type
 from pydantic import BaseModel
 
 
+class LLMQuotaExceeded(RuntimeError):
+    """
+    The provider refused the call because an account limit was reached — a spend cap, a quota or a
+    rate limit — and not because anything about the request was wrong.
+
+    Raised by the provider subclass, the only layer that can recognise its vendor's way of saying
+    it (Gemini answers 429 RESOURCE_EXHAUSTED; OpenAI raises RateLimitError). It exists so the
+    layers above can tell "the AI is unavailable because of cost" from "the AI broke", which are
+    different states with different words for the user — see services/refusal_text.py.
+
+    This class earned its place: a Google project spend cap surfaced as "I don't have data that
+    answers that", so a working dataset read as an empty one and the only trace was a log line.
+    """
+
+
 @dataclass
 class LLMResult:
     """Uniform result across providers."""

@@ -48,7 +48,9 @@ class AISearchResponse(BaseModel):
     source: Optional[str] = Field(None, description="handler | fallback")
     refused: bool = False
     reason: Optional[str] = Field(
-        None, description="off_domain | limit | budget | llm_off | error | unsupported | no_data"
+        None,
+        description="off_domain | limit | budget | provider_quota | llm_off | error | "
+                    "unsupported | no_data",
     )
     # Sent only with reason='no_data', so the client can name what the data actually covers
     # instead of a bare "nothing found". Null when the window could not be read.

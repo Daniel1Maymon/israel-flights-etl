@@ -34,6 +34,7 @@ from typing import Callable, Optional
 import structlog
 
 from app.services.ai_db import run_readonly
+from app.services.llm.base import LLMQuotaExceeded
 
 logger = structlog.get_logger()
 
@@ -159,6 +160,12 @@ def resolve(
 
     try:
         answer, tokens = ask_llm(raw, vocab.candidates())
+    except LLMQuotaExceeded:
+        # Not swallowed: "no data" is a claim about the DATA, and a spent quota says nothing about
+        # it. Letting this through the handler below would tell a user Barcelona is not in the
+        # dataset because a billing ceiling was reached. The endpoint turns it into the token-limit
+        # refusal instead (see api/ai_search.py).
+        raise
     except Exception as e:
         # A resolver outage must not turn into a wrong answer; unresolved means refuse. The token
         # count is unknowable here -- the call raised, so nothing reported one.

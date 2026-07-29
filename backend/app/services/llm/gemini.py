@@ -6,7 +6,25 @@ from typing import Optional, Type
 
 from pydantic import BaseModel
 
-from app.services.llm.base import LLMProvider, LLMResult
+from app.services.llm.base import LLMProvider, LLMQuotaExceeded, LLMResult
+
+
+def _quota_message(exc: Exception) -> Optional[str]:
+    """
+    The provider's own words if this is a limit refusal, else None.
+
+    Gemini says 429 RESOURCE_EXHAUSTED for all of them — the project spend cap, the free-tier
+    quota, and per-minute rate limiting — and the three are one situation to a visitor: not now,
+    try later. Matched on APIError rather than on any object carrying a `code`, so an unrelated
+    exception that happens to have one is not mistaken for a billing problem.
+    """
+    from google.genai.errors import APIError
+
+    if not isinstance(exc, APIError):
+        return None
+    if exc.code == 429 or (exc.status or "").upper() == "RESOURCE_EXHAUSTED":
+        return exc.message or str(exc)
+    return None
 
 
 class GeminiProvider(LLMProvider):
@@ -39,7 +57,17 @@ class GeminiProvider(LLMProvider):
             config["response_mime_type"] = "application/json"
             config["response_schema"] = response_schema
 
-        resp = self._client.models.generate_content(model=self._model, contents=user, config=config)
+        try:
+            resp = self._client.models.generate_content(
+                model=self._model, contents=user, config=config
+            )
+        except Exception as e:
+            # Translated here because this is the only file that may know what a Gemini error is.
+            # Everything above sees the provider-agnostic LLMQuotaExceeded (see llm/base.py).
+            message = _quota_message(e)
+            if message is None:
+                raise
+            raise LLMQuotaExceeded(message) from e
 
         meta = getattr(resp, "usage_metadata", None)
         tokens = int(getattr(meta, "total_token_count", 0) or 0) if meta else 0

@@ -94,6 +94,20 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 /**
+ * Bar colour for a refusal reason — the two that need someone to act stand out from the rest.
+ *
+ * Red is a fault. Amber is a ceiling we hit: `provider_quota` means the provider stopped serving
+ * us (a spend cap, a quota, a rate limit) and `budget` means our own monthly ceiling tripped.
+ * Both stop AI search dead while nothing is wrong with the data, and neither clears itself
+ * without someone raising a limit — so seeing them at a glance is the point.
+ */
+function refusalColor(reason: string): string {
+  if (reason === "error") return "#ef4444";
+  if (reason === "provider_quota" || reason === "budget") return "#f59e0b";
+  return "hsl(var(--primary))";
+}
+
+/**
  * The AI kill switch.
  *
  * Green = AI search is answering questions. Red = every question is refused before an LLM is
@@ -329,10 +343,7 @@ export default function Admin() {
                         <Tooltip />
                         <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                           {m.refusals_by_reason.map((entry) => (
-                            <Cell
-                              key={entry.reason}
-                              fill={entry.reason === "error" ? "#ef4444" : "hsl(var(--primary))"}
-                            />
+                            <Cell key={entry.reason} fill={refusalColor(entry.reason)} />
                           ))}
                         </Bar>
                       </BarChart>
