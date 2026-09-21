@@ -1,0 +1,68 @@
+name: Daily Railway Postgres backup
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: railway-postgres-backup
+  cancel-in-progress: false
+
+env:
+  R2_BUCKET: flightsdb-backups
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Create and validate dump
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          stamp="$(date -u +'%Y-%m-%dT%H-%M-%SZ')"
+          dump="flightsdb-${stamp}.dump"
+          docker run --rm -e DATABASE_URL -v "$PWD:/backup" postgres:17 \
+            pg_dump --format=custom --compress=9 --no-owner --no-acl --file="/backup/$dump" "$DATABASE_URL"
+          test -s "$dump"
+          docker run --rm -v "$PWD:/backup" postgres:17 pg_restore --list "/backup/$dump" >/dev/null
+          sha256sum "$dump" > "${dump}.sha256"
+          printf 'DUMP_FILE=%s\n' "$dump" >> "$GITHUB_ENV"
+          printf 'Dump validated: %s (%s bytes)\n' "$dump" "$(stat -c '%s' "$dump")"
+
+      - name: Upload to R2 and verify object size
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          set -Eeuo pipefail
+          aws s3 cp "$DUMP_FILE" "s3://${R2_BUCKET}/daily/${DUMP_FILE}" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          aws s3 cp "${DUMP_FILE}.sha256" "s3://${R2_BUCKET}/daily/${DUMP_FILE}.sha256" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          remote_size="$(aws s3api head-object --bucket "$R2_BUCKET" --key "daily/${DUMP_FILE}" --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text)"
+          local_size="$(stat -c '%s' "$DUMP_FILE")"
+          test "$remote_size" = "$local_size"
+          printf 'R2 object verified: daily/%s (%s bytes)\n' "$DUMP_FILE" "$remote_size"
+
+      - name: Prune backups older than 30 days
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          set -Eeuo pipefail
+          cutoff="$(date -u -d '30 days ago' +%s)"
+          aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix daily/ --endpoint-url "$R2_ENDPOINT" --output json \
+            | jq -r --argjson cutoff "$cutoff" '.Contents[]? | select((.LastModified | fromdateiso8601) < $cutoff) | .Key' \
+            | while IFS= read -r key; do
+                aws s3api delete-object --bucket "$R2_BUCKET" --key "$key" --endpoint-url "$R2_ENDPOINT" >/dev/null
+                printf 'Pruned %s\n' "$key"
+              done
