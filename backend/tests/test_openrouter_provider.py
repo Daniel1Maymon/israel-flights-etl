@@ -77,7 +77,10 @@ def test_schema_is_sent_to_the_model(monkeypatch):
     for field in Intent.model_fields:  # every required key is spelled out for the model
         assert f'"{field}"' in system
     assert call["response_format"] == {"type": "json_object"}
-    assert call["extra_body"] == {"provider": {"require_parameters": True}}
+    assert call["extra_body"] == {
+        "reasoning": {"effort": "none"},
+        "provider": {"require_parameters": True},
+    }
     assert call["model"] == "vendor/model" and call["temperature"] == 0.0
     assert isinstance(r.parsed, Intent) and r.tokens == 123
 
@@ -104,7 +107,8 @@ def test_missing_required_field_is_rejected(monkeypatch):
 def test_plain_text_call_sends_no_json_mode(monkeypatch):
     p, fake = _provider(monkeypatch, reply="  Crete is HERAKLION  ")
     r = p.generate(system="s", user="u", max_output_tokens=32)
-    assert "response_format" not in fake.calls[0] and "extra_body" not in fake.calls[0]
+    assert "response_format" not in fake.calls[0]
+    assert fake.calls[0]["extra_body"] == {"reasoning": {"effort": "none"}}  # thinking off on every call
     assert fake.calls[0]["max_tokens"] == 32
     assert r.text == "Crete is HERAKLION" and r.parsed is None
 
@@ -150,3 +154,22 @@ def test_unknown_provider_still_rejected(monkeypatch):
     monkeypatch.setattr(settings, "openrouter_api_key", "")
     with pytest.raises(ValueError):
         get_provider("nope")
+
+
+def test_empty_reasoning_effort_sends_no_reasoning_param(monkeypatch):
+    p = OpenRouterProvider(model="m", api_key="test-key-not-real", reasoning_effort="")
+    fake = FakeCompletions("ok")
+    p._client = SimpleNamespace(chat=SimpleNamespace(completions=fake))
+    p.generate(system="s", user="u")
+    assert "extra_body" not in fake.calls[0]
+
+
+def test_default_model_is_deepseek_v41_flash_with_reasoning_off():
+    assert settings.openrouter_model == "deepseek/deepseek-v4.1-flash"
+    assert settings.openrouter_reasoning_effort == "none"
+
+
+def test_factory_passes_reasoning_setting(monkeypatch):
+    monkeypatch.setattr(settings, "openrouter_api_key", "test-key-not-real")
+    monkeypatch.setattr(settings, "openrouter_reasoning_effort", "low")
+    assert get_provider()._reasoning_effort == "low"
