@@ -197,10 +197,11 @@ LLM_MODEL=gemini-2.5-flash
 
 **OpenRouter.** Set `OPENROUTER_API_KEY` and AI search switches to OpenRouter on its own, whatever
 `LLM_PROVIDER` says; the model comes from `OPENROUTER_MODEL` (default
-`mistralai/mistral-small-24b-instruct-2501`, a non-reasoning model), not from `LLM_MODEL`. Remove the
+`deepseek/deepseek-v4.1-flash`), not from `LLM_MODEL`. Remove the
 key to fall back to `LLM_PROVIDER`. The Intent schema is written into the prompt and the reply is
-validated, because OpenRouter does not enforce it for every model. Prefer a non-reasoning model:
-reasoning models can spend the small token budget on hidden thinking and return empty text.
+validated, because OpenRouter does not enforce it for every model. Reasoning is switched
+off (`OPENROUTER_REASONING_EFFORT=none`, the model reasons by default and would spend the small token
+budget on hidden thinking and return empty text); set it empty for a model without that control.
 Offline tests: `backend/tests/test_openrouter_provider.py`.
 
 ### Configuration (defaults)
