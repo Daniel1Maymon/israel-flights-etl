@@ -7,8 +7,10 @@ Differences from Gemini that this file absorbs:
   Pydantic here, so a malformed answer fails loudly instead of being trusted.
 - `provider.require_parameters` makes OpenRouter route only to endpoints that support every
   parameter sent (here: response_format), rather than silently dropping it.
-- Reasoning is not controlled. Use a non-reasoning model (the default is one): a reasoning model can
-  spend the small max_output_tokens budget on hidden thinking and return empty text.
+- Reasoning is switched off by default (reasoning.effort "none"). The default model, DeepSeek V4.1
+  Flash, reasons by default, and reasoning tokens share max_tokens, so with the small budgets used
+  here it could return empty text. OPENROUTER_REASONING_EFFORT="" sends nothing, for models that
+  have no reasoning control.
 Requires the `openai` package and OPENROUTER_API_KEY.
 """
 from __future__ import annotations
@@ -36,13 +38,20 @@ def _strip_fences(text: str) -> str:
 
 
 class OpenRouterProvider(LLMProvider):
-    def __init__(self, model: str, api_key: str, base_url: str = "https://openrouter.ai/api/v1") -> None:
+    def __init__(
+        self,
+        model: str,
+        api_key: str,
+        base_url: str = "https://openrouter.ai/api/v1",
+        reasoning_effort: str = "none",
+    ) -> None:
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set.")
         from openai import OpenAI  # lazy import
 
         self._client = OpenAI(base_url=base_url, api_key=api_key)
         self._model = model
+        self._reasoning_effort = (reasoning_effort or "").strip()
 
     def generate(
         self,
@@ -69,9 +78,14 @@ class OpenRouterProvider(LLMProvider):
             "temperature": temperature,
             "max_tokens": max_output_tokens,
         }
+        extra: dict = {}
+        if self._reasoning_effort:
+            extra["reasoning"] = {"effort": self._reasoning_effort}
         if response_schema is not None:
             kwargs["response_format"] = {"type": "json_object"}
-            kwargs["extra_body"] = {"provider": {"require_parameters": True}}
+            extra["provider"] = {"require_parameters": True}
+        if extra:
+            kwargs["extra_body"] = extra
 
         try:
             resp = self._client.chat.completions.create(**kwargs)
