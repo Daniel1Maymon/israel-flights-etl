@@ -29,6 +29,7 @@ def get_provider(name: str | None = None) -> LLMProvider:
             model=settings.openrouter_model,
             api_key=settings.openrouter_api_key,
             base_url=settings.openrouter_base_url,
+            reasoning_effort=settings.openrouter_reasoning_effort,
         )
 
     raise ValueError(f"unknown LLM provider: {name!r}")
