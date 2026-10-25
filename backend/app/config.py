@@ -132,10 +132,15 @@ class Settings(BaseSettings):
     keep_alive_timeout: int = 5
 
     # AI search (natural-language query feature) — provider-agnostic LLM layer
-    llm_provider: str = "gemini"                   # LLM_PROVIDER: gemini | openai
+    llm_provider: str = "gemini"                   # LLM_PROVIDER: gemini | openai | openrouter
     llm_model: str = "gemini-2.5-flash"            # LLM_MODEL: any model id for the chosen provider
     gemini_api_key: str = ""                        # GEMINI_API_KEY
     openai_api_key: str = ""                        # OPENAI_API_KEY
+    # OpenRouter (OpenAI-compatible gateway). When OPENROUTER_API_KEY is set it takes over AI search
+    # regardless of LLM_PROVIDER, so adding the key is the only step needed to switch.
+    openrouter_api_key: str = ""                    # OPENROUTER_API_KEY
+    openrouter_model: str = "mistralai/mistral-small-24b-instruct-2501"  # OPENROUTER_MODEL
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"            # OPENROUTER_BASE_URL
     database_url_ro: str = ""                       # DATABASE_URL_RO — read-only rankair_ro role
     ai_daily_limit_per_user: int = 10               # questions per user per day
     # Proxies between the internet and this app (Railway's edge is one). The visitor's address sits
